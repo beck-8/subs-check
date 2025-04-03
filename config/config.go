@@ -34,6 +34,10 @@ type Config struct {
 	SubStorePort       string   `yaml:"sub-store-port"`
 	MihomoOverwriteUrl string   `yaml:"mihomo-overwrite-url"`
 	MediaCheck         bool     `yaml:"media-check"`
+	IPRiskCheck        bool     `yaml:"ip-risk-check"`
+	UDPCheck           bool     `yaml:"udp-check"`
+	StunServer         string   `yaml:"stun-server"`
+	UDPFlagText        string   `yaml:"udp-flag-text"`
 }
 
 var GlobalConfig = &Config{
@@ -41,6 +45,9 @@ var GlobalConfig = &Config{
 	ListenPort:         ":8199",
 	NotifyTitle:        "🔔 节点状态更新",
 	MihomoOverwriteUrl: "https://slink.ltd/https://raw.githubusercontent.com/mihomo-party-org/override-hub/main/yaml/ACL4SSR_Online_Full.yaml",
+	UDPCheck:           false,
+	StunServer:         "stun.l.google.com:19302",
+	UDPFlagText:        "游戏",
 }
 
 //go:embed config.example.yaml

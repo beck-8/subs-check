@@ -6,10 +6,16 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/metacubex/mihomo v1.19.3
+	github.com/pion/stun v0.6.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/metacubex/bart v0.19.0 // indirect
+require (
+	github.com/metacubex/bart v0.19.0 // indirect
+	github.com/pion/dtls/v2 v2.2.7 // indirect
+	github.com/pion/logging v0.2.2 // indirect
+	github.com/pion/transport/v2 v2.2.1 // indirect
+)
 
 require (
 	github.com/3andne/restls-client-go v0.1.6 // indirect

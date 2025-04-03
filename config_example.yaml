@@ -1,0 +1,17 @@
+# 是否检查代理节点的WebRTC IP地址泄露风险 (UDP)
+# 通过代理服务器使用WebRTC查询IP地址, 以检测代理是否支持 UDP 连接
+webrtc_check:
+  # 是否启用WebRTC检查
+  enable: false
+  # 用于WebRTC检查的 STUN 服务器
+  stun_server: "stun.l.google.com"
+  # STUN 服务器端口
+  stun_port: 19302
+  # Mihomo API 地址
+  mihomo_api_url: "http://127.0.0.1:9090"
+  # 从Mihomo获取的代理节点名称 (使用正则表达式匹配)
+  # 示例: 匹配所有节点
+  # node_name_pattern: ".*"
+  # 示例: 匹配包含 "US" 或 "美国" 的节点
+  # node_name_pattern: ".*(US|美国).*"
+  node_name_pattern: ".*" 
