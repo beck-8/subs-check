@@ -89,6 +89,8 @@ func init() {
 			}
 		}()
 	}
+	// termux环境
+	os.Setenv("SSL_CERT_FILE", "/data/data/com.termux/files/usr/etc/tls/cert.pem")
 }
 
 func getLogLevel() slog.Level {
