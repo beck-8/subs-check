@@ -39,6 +39,7 @@ type Result struct {
 	IP         string
 	IPRisk     string
 	Country    string
+	ASN        string
 }
 
 // ProxyChecker 处理代理检测的主要结构体
@@ -245,18 +246,26 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 					res.Gemini = true
 				}
 			case "iprisk":
-				country, ip := proxyutils.GetProxyCountry(httpClient.Client)
-				if ip == "" {
-					break
+				// 获取ip和国家信息
+				var ip string
+				res.Country, ip = proxyutils.GetProxyCountry(httpClient.Client)
+				if ip != "" {
+					res.IP = ip
+					ipRisk, err := platform.CheckIPRisk(httpClient.Client, ip)
+					if err == nil && ipRisk != "" {
+						res.IPRisk = ipRisk
+					} else {
+						// 失败的可能性高，所以放上日志
+						slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
+					}
 				}
-				res.IP = ip
-				res.Country = country
-				risk, err := platform.CheckIPRisk(httpClient.Client, ip)
-				if err == nil {
-					res.IPRisk = risk
+			case "asn":
+				// 直接调用CheckASN
+				asn, err := platform.CheckASN(httpClient.Client)
+				if err == nil && asn != "" {
+					res.ASN = asn
 				} else {
-					// 失败的可能性高，所以放上日志
-					slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
+					slog.Debug(fmt.Sprintf("查询ASN失败: %v", err))
 				}
 			case "tiktok":
 				if region, _ := platform.CheckTikTok(httpClient.Client); region != "" {
@@ -284,6 +293,9 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 	}
 
 	name := res.Proxy["name"].(string)
+
+	// 移除所有已有的标记（包括速度、IPRisk、ASN和平台标记）
+	name = regexp.MustCompile(`\s*\|(?:Netflix|Disney|Youtube|Openai|Gemini|\d+%|AS\d+|\s*⬇️\s*[\d.]+[KM]B/s)`).ReplaceAllString(name, "")
 	name = strings.TrimSpace(name)
 
 	var tags []string
@@ -329,6 +341,10 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 			if res.IPRisk != "" {
 				tags = append(tags, res.IPRisk)
 			}
+		case "asn":
+			if res.ASN != "" {
+				tags = append(tags, "AS"+res.ASN)
+			}
 		case "youtube":
 			if res.Youtube != "" {
 				tags = append(tags, fmt.Sprintf("YT-%s", res.Youtube))
@@ -350,7 +366,6 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 	}
 
 	res.Proxy["name"] = name
-
 }
 
 // showProgress 显示进度条

@@ -47,7 +47,7 @@ rename-node: true
 node-prefix: ""
 
 # 是否开启流媒体检测，其中IP欺诈依赖重命名
-media-check: false
+media-check: true
 platforms:
   - iprisk
   - tiktok
@@ -56,6 +56,8 @@ platforms:
   - disney
   - openai
   - gemini
+  - iprisk
+  - asn
 
 # 保留之前测试成功的节点
 # 如果为true，则保留之前测试成功的节点，这样就不会因为上游链接更新，导致可用的节点被清除掉
