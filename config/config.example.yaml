@@ -12,7 +12,7 @@ check-interval: 30
 # "0 0 1 * *" 表示每月1日0点执行
 # "*/30 * * * *" 表示每30分钟执行一次
 # cron-expression: "*/30 * * * *"
-
+cron-expression: 0 11 */3 * *
 # 超时时间(毫秒)(节点的最大延迟)
 timeout: 5000
 # 测速地址(注意 并发数*节点速度<最大网速 否则测速结果不准确)
@@ -20,7 +20,7 @@ timeout: 5000
 # 如果找不到稳定的测速地址，可以自建测速地址
 speed-test-url: https://github.com/AaronFeng753/Waifu2x-Extension-GUI/releases/download/v2.21.12/Waifu2x-Extension-GUI-v2.21.12-Portable.7z
 # 最低测速结果舍弃(KB/s)
-min-speed: 512
+min-speed: 3072
 # 下载测试时间(s)(与下载链接大小相关，默认最大测试10s)
 download-timeout: 10
 # 单节点测速下载数据大小(MB)限制，0为不限
@@ -42,7 +42,7 @@ rename-node: true
 node-prefix: ""
 
 # 是否开启流媒体检测，其中IP欺诈依赖重命名
-media-check: false
+media-check: true
 platforms:
   - iprisk
   - tiktok
@@ -54,11 +54,11 @@ platforms:
 
 # 保留之前测试成功的节点
 # 如果为true，则保留之前测试成功的节点，这样就不会因为上游链接更新，导致可用的节点被清除掉
-keep-success-proxies: false
+keep-success-proxies: true
 # 保存几个成功的节点，为0代表不限制 
 # 如果你的并发数量超过这个参数，那么成功的结果可能会大于这个数值
 # success-limit <= success <= success-limit+concurrent
-success-limit: 0
+success-limit: 50
 
 # 输出目录
 # 如果为空，则为程序所在目录的config目录
@@ -70,7 +70,7 @@ output-dir: ""
 enable-web-ui: true
 # 填写Web控制面板的api-key，如果为空，则自动生成
 # 配置文件为空时，支持使用环境变量设置 API_KEY
-api-key: ""
+api-key: "chenyi"
 
 # 检测完成后执行的回调脚本路径
 # 脚本将在检测完成后执行，可用于自定义通知或其他操作
@@ -112,7 +112,7 @@ mihomo-api-secret: ""
 
 # 保存方法
 # 目前支持的保存方法: r2, local, gist, webdav, s3
-save-method: local
+save-method: gist
 
 # webdav
 webdav-url: "https://example.com/dav/"
@@ -120,7 +120,7 @@ webdav-username: "admin"
 webdav-password: "admin"
 
 # gist id
-github-gist-id: ""
+github-gist-id: "f708d706b0d1b4a34bd84c8b0e122b37"
 # github token
 github-token: ""
 # github api mirror
@@ -148,7 +148,7 @@ s3-bucket-lookup: "auto"
 sub-urls-retry: 3
 # Github Proxy，获取订阅使用，结尾要带的 /
 # github-proxy: "https://ghfast.top/"
-github-proxy: ""
+github-proxy: "https://ghfast.top/"
 # 符合条件节点数量的占比，低于此值会将订阅链接打印出来，用于排查质量差的订阅
 success-rate: 0.1
 # 订阅地址 支持 clash/mihomo/v2ray/base64 格式的订阅链接
@@ -188,3 +188,6 @@ sub-urls:
   - "https://raw.githubusercontent.com/ripaojiedian/freenode/main/clash"
   - "https://raw.githubusercontent.com/go4sharing/sub/main/sub.yaml"
   - "https://raw.githubusercontent.com/mfuu/v2ray/master/clash.yaml"
+  - "https://project-e.ekt.me/sub?token=%E5%86%B2%E6%B5%AA%E5%BF%85%E5%A4%87"
+  - "https://project-b.ekt.me/sub?token=%E5%85%AC%E7%9B%8AAWS"
+  - "https://github.com/Epodonios/v2ray-configs/raw/main/All_Configs_Sub.txt"
