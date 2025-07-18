@@ -283,7 +283,7 @@ graph TD
 </details>
 
 ## 🙏 鸣谢
-[cmliu](https://github.com/cmliu)、[Sub-Store](https://github.com/sub-store-org/Sub-Store)、[bestruirui](https://github.com/bestruirui/BestSub)
+[cmliu](https://github.com/cmliu)、[Sub-Store](https://github.com/sub-store-org/Sub-Store)、[bestruirui](https://github.com/bestruirui/BestSub)、[iplark](https://iplark.com/)
 
 ## ⭐ Star History
 

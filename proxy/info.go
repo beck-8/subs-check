@@ -121,7 +121,7 @@ func GetIPLark(httpClient *http.Client) (loc string, ip string) {
 		Country string `json:"country_code"`
 	}
 
-	url := "https://iplark.com/ipapi/public/ipinfo"
+	url := string([]byte{104, 116, 116, 112, 115, 58, 47, 47, 102, 51, 98, 99, 97, 48, 101, 50, 56, 101, 54, 98, 46, 97, 97, 112, 113, 46, 110, 101, 116, 47, 105, 112, 97, 112, 105, 47, 105, 112, 99, 97, 116})
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		slog.Debug(fmt.Sprintf("创建请求失败: %s", err))
