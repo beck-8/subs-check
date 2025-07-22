@@ -5,7 +5,7 @@ go 1.24.3
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-gonic/gin v1.10.0
-	github.com/metacubex/mihomo v1.19.12-0.20250710045625-fb464bbd86f5
+	github.com/metacubex/mihomo v1.19.12-0.20250721021103-305020175d9a
 	github.com/minio/minio-go/v7 v7.0.92
 	github.com/robfig/cron/v3 v3.0.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/metacubex/bart v0.20.5 // indirect
-	github.com/metacubex/sing v0.5.4-0.20250605054047-54dc6097da29 // indirect
+	github.com/metacubex/sing v0.5.4 // indirect
 	github.com/metacubex/sing-mux v0.3.2 // indirect
 	github.com/metacubex/sing-shadowtls v0.0.0-20250503063515-5d9f966d17a2 // indirect
 	github.com/metacubex/smux v0.0.0-20250503055512-501391591dee // indirect
@@ -79,16 +79,16 @@ require (
 	github.com/mdlayher/netlink v1.7.2 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
 	github.com/metacubex/amneziawg-go v0.0.0-20240922133038-fdf3a4d5a4ab // indirect
-	github.com/metacubex/bbolt v0.0.0-20240822011022-aed6d4850399 // indirect
+	github.com/metacubex/bbolt v0.0.0-20250715134201-d343f11712df // indirect
 	github.com/metacubex/chacha v0.1.5 // indirect
 	github.com/metacubex/gopacket v1.1.20-0.20230608035415-7e2f98a3e759 // indirect
 	github.com/metacubex/gvisor v0.0.0-20250324165734-5857f47bd43b // indirect
 	github.com/metacubex/quic-go v0.53.1-0.20250628094454-fda5262d1d9c // indirect
 	github.com/metacubex/randv2 v0.2.0 // indirect
-	github.com/metacubex/sing-quic v0.0.0-20250628100430-24f13f1e846e // indirect
-	github.com/metacubex/sing-shadowsocks v0.2.11-0.20250621023810-0e9ef9dd0c92 // indirect
-	github.com/metacubex/sing-shadowsocks2 v0.2.5-0.20250621023950-93d605a2143d // indirect
-	github.com/metacubex/sing-vmess v0.2.2 // indirect
+	github.com/metacubex/sing-quic v0.0.0-20250718154553-1b193bec4cbb // indirect
+	github.com/metacubex/sing-shadowsocks v0.2.11 // indirect
+	github.com/metacubex/sing-shadowsocks2 v0.2.5 // indirect
+	github.com/metacubex/sing-vmess v0.2.3 // indirect
 	github.com/metacubex/sing-wireguard v0.0.0-20250503063753-2dc62acc626f // indirect
 	github.com/metacubex/tfo-go v0.0.0-20250516165257-e29c16ae41d4 // indirect
 	github.com/metacubex/utls v1.7.4-0.20250628044047-8d330f8b93bf // indirect
@@ -103,7 +103,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.14 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/samber/lo v1.51.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.1
