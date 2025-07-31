@@ -50,7 +50,7 @@
 # sub-store自定义访问路径，必须以/开头，后续访问订阅也要带上此路径
 # 设置path之后，还可以开启订阅分享功能，无需暴露真实的path
 # sub-store-path: "/path"
-sub-store-path: "diypath"
+sub-store-path: "/diypath"
 ```
 访问路径变成`http://127.0.0.1:8299/diypath`
 
