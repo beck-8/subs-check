@@ -29,10 +29,13 @@ type Config struct {
 	S3Bucket             string   `yaml:"s3-bucket"`
 	S3UseSSL             bool     `yaml:"s3-use-ssl"`
 	S3BucketLookup       string   `yaml:"s3-bucket-lookup"`
-	SubUrlsReTry         int      `yaml:"sub-urls-retry"`
-	SubUrlsRetryInterval int      `yaml:"sub-urls-retry-interval"`
-	SubUrlsTimeout       int      `yaml:"sub-urls-timeout"`
-	SubUrls              []string `yaml:"sub-urls"`
+    SubUrlsReTry         int      `yaml:"sub-urls-retry"`
+    SubUrlsRetryInterval int      `yaml:"sub-urls-retry-interval"`
+    SubUrlsTimeout       int      `yaml:"sub-urls-timeout"`
+    // 远程订阅地址清单，指向一个可返回多个订阅链接的远程文件
+    // 支持换行分隔或 YAML/JSON 字符串数组
+    SubUrlsRemote        string   `yaml:"sub-urls-remote"`
+    SubUrls              []string `yaml:"sub-urls"`
 	SuccessRate          float32  `yaml:"success-rate"`
 	MihomoApiUrl         string   `yaml:"mihomo-api-url"`
 	MihomoApiSecret      string   `yaml:"mihomo-api-secret"`

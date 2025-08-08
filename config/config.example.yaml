@@ -164,6 +164,16 @@ sub-urls-retry: 3
 github-proxy: ""
 # 符合条件节点数量的占比，低于此值会将订阅链接打印出来，用于排查质量差的订阅
 success-rate: 0
+# 远程订阅清单地址；用于集中维护多个订阅链接，避免频繁修改本地文件
+# 支持两种格式：
+# 1) 纯文本：按行分隔，支持 # 注释与空行
+# 2) YAML/JSON：字符串数组 ["https://...", "https://..."]
+# 支持时间占位符与 github-proxy，例如包含 {Ymd}、{Y-m-d}
+sub-urls-remote: ""
+# 示例：
+# sub-urls-remote: "https://raw.githubusercontent.com/your/repo/main/sub-list-{Ymd}.txt"
+# 或（YAML/JSON 数组）
+# sub-urls-remote: "https://example.com/sub-list.yaml"
 # 订阅地址 支持 clash/mihomo/v2ray/base64 格式的订阅链接
 # 如果用户想明确使用clash类型，那可以在支持的订阅链接结尾加上 &flag=clash.meta
 # github 链接可自己添加ghproxy使用；订阅链接支持 HTTP_PROXY HTTPS_PROXY 环境变量加速拉取

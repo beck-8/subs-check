@@ -139,6 +139,29 @@ services:
 go run . -f ./config/config.yaml
 ```
 
+### 📚 远程订阅清单（可选）
+
+> 通过远程 URL 维护多个订阅链接，避免频繁修改本地 `config.yaml`。
+
+- 在配置中设置：
+
+```yaml
+# 远程清单地址，支持文本或 YAML/JSON 数组
+sub-urls-remote: "https://example.com/sub-list.txt"
+```
+
+- 远程清单格式：
+  - 文本（按行，一个 URL 一行，支持空行与以 `#` 开头的注释）
+  - YAML/JSON 字符串数组（如 `- https://foo`、`["https://foo","https://bar"]`）
+
+- 支持时间占位符和 GitHub 加速：
+  - `{Y}` `{m}` `{d}` `{Ymd}` `{Y_m_d}` `{Y-m-d}` 会自动替换为当前日期
+  - `https://raw.githubusercontent.com/...` 会自动拼接 `github-proxy`（如配置）
+
+#### 本地 vs 远程
+- `sub-urls`：本地直接写多个订阅地址，便于快速增删；热加载生效。
+- `sub-urls-remote`：指向远程清单，适合集中维护与多人共享；与 `sub-urls` 合并并去重，网络失败时仅忽略远程部分。
+
 ## 🔔 通知渠道配置（可选）
 <details>
   <summary>展开查看</summary>
