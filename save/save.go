@@ -95,10 +95,23 @@ func (cs *ConfigSaver) Save() error {
 
 // categorizeProxies 将代理按类别分类
 func (cs *ConfigSaver) categorizeProxies() {
+	// 预分配每个类别的容量，避免频繁扩容
+	for i := range cs.categories {
+		cs.categories[i].Proxies = make([]map[string]any, 0, len(cs.results))
+	}
+
 	for _, result := range cs.results {
 		for i := range cs.categories {
 			if cs.categories[i].Filter(result) {
-				cs.categories[i].Proxies = append(cs.categories[i].Proxies, result.Proxy)
+				// 创建Proxy的副本，避免修改原始数据
+				proxyCopy := make(map[string]any, len(result.Proxy))
+				for k, v := range result.Proxy {
+					proxyCopy[k] = v
+				}
+				// 在保存时清理这些字段
+				delete(proxyCopy, "sub_url")
+				delete(proxyCopy, "sub_tag")
+				cs.categories[i].Proxies = append(cs.categories[i].Proxies, proxyCopy)
 			}
 		}
 	}

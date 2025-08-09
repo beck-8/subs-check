@@ -4,36 +4,52 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"strings"
-
 	"log/slog"
+	"net/http"
+	"os"
+	"strings"
 
 	"github.com/beck-8/subs-check/config"
 	"github.com/metacubex/mihomo/common/convert"
+	"github.com/oschwald/maxminddb-golang/v2"
+	"github.com/sinspired/checkip/pkg/ipinfo"
 )
 
-func GetProxyCountry(httpClient *http.Client) (loc string, ip string) {
+func GetProxyCountry(httpClient *http.Client, db *maxminddb.Reader) (loc string, ip string, countryCode_tag string, err error) {
 	for i := 0; i < config.GlobalConfig.SubUrlsReTry; i++ {
+		// 使用 github.com/sinspired/checkip/pkg/ipinfo API 获取 Mixed 结果
+		// 设置一个临时环境变量，以排除部分api因数据库未更新返回的 CN
+		os.Setenv("SUBS-CHECK-CALL", "true")
+		defer os.Unsetenv("SUBS-CHECK-CALL")
+		loc, ip, countryCode_tag, _ = ipinfo.GetMixed(httpClient, db)
+		if loc != "" && countryCode_tag != "" {
+			slog.Debug(fmt.Sprintf("Mixed 获取节点位置成功: %s %s", loc, countryCode_tag))
+			return loc, ip, countryCode_tag, nil
+		}
+
 		loc, ip = GetMe(httpClient)
 		if loc != "" && ip != "" {
-			return
+			slog.Debug(fmt.Sprintf("me 获取节点位置成功: %s %s", loc, ip))
+			return loc, ip, "", nil
 		}
 		loc, ip = GetIPLark(httpClient)
 		if loc != "" && ip != "" {
-			return
+			slog.Debug(fmt.Sprintf("iplark 获取节点位置成功: %s %s", loc, ip))
+			return loc, ip, "", nil
 		}
 		loc, ip = GetCFProxy(httpClient)
 		if loc != "" && ip != "" {
-			return
+			slog.Debug(fmt.Sprintf("cf 获取节点位置成功: %s %s", loc, ip))
+			return loc, ip, "", nil
 		}
-		// 不准
+		// 不准,非常不准
 		loc, ip = GetEdgeOneProxy(httpClient)
 		if loc != "" && ip != "" {
-			return
+			slog.Debug(fmt.Sprintf("edgeone 获取节点位置成功: %s %s", loc, ip))
+			return loc, ip, "", nil
 		}
 	}
-	return
+	return "", "", "", nil
 }
 
 func GetEdgeOneProxy(httpClient *http.Client) (loc string, ip string) {

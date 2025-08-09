@@ -47,15 +47,35 @@ rename-node: true
 node-prefix: ""
 
 # 是否开启流媒体检测，其中IP欺诈依赖重命名
-media-check: false
+media-check: true
 platforms:
   - iprisk
+  - openai
+  - gemini
   - tiktok
   - youtube
   - netflix
   - disney
-  - openai
-  - gemini
+  - x
+
+# 是否丢弃无法访问 cloudflare 的节点(可正常访问Google等,默认保留,修改会导致可用节点急剧减少,且有大概率误杀)
+drop-bad-cf-nodes: false
+
+# 增强的位置显示开关,默认关闭
+# 无法访问 CF 的 CF 节点: HK⁻¹
+# 正常访问,且出口位置与cdn位置一致: HK¹⁺; 位置不一致: HK¹-US⁰
+# 非 CF 节点,直接显示: SG²
+# 前两位字母是实际浏览网站识别的位置,-US⁰为使用CF CDN服务的网站识别的位置,比如GPT, X等
+enhanced-tag: true
+
+# MaxMind 地理数据库路径
+# 如果为空，则使用内置的数据库文件（解压到output目录）
+# 可以指定本地数据库文件路径，如：/path/to/GeoLite2-Country.mmdb
+maxmind-db-path: ""
+
+# 输出目录
+# 如果为空，则为程序所在目录的config目录
+output-dir: ""
 
 # 保留之前测试成功的节点
 # 如果为true，则保留之前测试成功的节点，这样就不会因为上游链接更新，导致可用的节点被清除掉

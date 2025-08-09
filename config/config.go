@@ -51,12 +51,15 @@ type Config struct {
 	MihomoOverwriteUrl   string   `yaml:"mihomo-overwrite-url"`
 	MediaCheck           bool     `yaml:"media-check"`
 	Platforms            []string `yaml:"platforms"`
+	DropBadCfNodes       bool     `yaml:"drop-bad-cf-nodes"`
+	EnhancedTag          bool     `yaml:"enhanced-tag"`
 	SuccessLimit         int32    `yaml:"success-limit"`
 	NodePrefix           string   `yaml:"node-prefix"`
 	EnableWebUI          bool     `yaml:"enable-web-ui"`
 	APIKey               string   `yaml:"api-key"`
 	GithubProxy          string   `yaml:"github-proxy"`
 	CallbackScript       string   `yaml:"callback-script"`
+	MaxMindDBPath        string   `yaml:"maxmind-db-path"`
 }
 
 var GlobalConfig = &Config{
@@ -65,6 +68,8 @@ var GlobalConfig = &Config{
 	NotifyTitle:        "🔔 节点状态更新",
 	MihomoOverwriteUrl: "http://127.0.0.1:8199/sub/ACL4SSR_Online_Full.yaml",
 	Platforms:          []string{"openai", "youtube", "netflix", "disney", "gemini", "iprisk"},
+	DropBadCfNodes:     false,
+	EnhancedTag:        false,
 	DownloadMB:         20,
 }
 
