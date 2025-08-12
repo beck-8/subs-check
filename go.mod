@@ -1,6 +1,6 @@
 module github.com/beck-8/subs-check
 
-go 1.24.3
+go 1.24.6
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
@@ -8,6 +8,7 @@ require (
 	github.com/metacubex/mihomo v1.19.12
 	github.com/minio/minio-go/v7 v7.0.95
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/sinspired/checkip v0.2.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -96,6 +97,7 @@ require (
 	github.com/mroth/weightedrand/v2 v2.1.0 // indirect
 	github.com/oasisprotocol/deoxysii v0.0.0-20220228165953-2091330c22b7 // indirect
 	github.com/openacid/low v0.1.21 // indirect
+	github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.8
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
@@ -123,7 +125,7 @@ require (
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	golang.org/x/tools v0.35.0 // indirect

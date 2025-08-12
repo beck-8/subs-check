@@ -10,35 +10,54 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/beck-8/subs-check/assets"
 	"github.com/beck-8/subs-check/check/platform"
 	"github.com/beck-8/subs-check/config"
 	proxyutils "github.com/beck-8/subs-check/proxy"
 	"github.com/juju/ratelimit"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/constant"
+	"github.com/oschwald/maxminddb-golang/v2"
+)
+
+// 预编译的正则表达式，避免重复编译
+var (
+	speedRegex    = regexp.MustCompile(`\s*\|(?:\s*[\d.]+[KM]B/s)`)
+	platformRegex = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT⁺|X|GPT|GM|YT-[^|]+|TK-[^|]+|\d+%)`)
+
+	// Result对象池，用于复用Result对象
+	resultPool = sync.Pool{
+		New: func() any {
+			return &Result{}
+		},
+	}
 )
 
 // Result 存储节点检测结果
 type Result struct {
-	Proxy      map[string]any
-	Openai     bool
-	OpenaiWeb  bool
-	Youtube    string
-	Netflix    bool
-	Google     bool
-	Cloudflare bool
-	Disney     bool
-	Gemini     bool
-	TikTok     string
-	IP         string
-	IPRisk     string
-	Country    string
+	Proxy          map[string]any
+	Openai         bool
+	OpenaiWeb      bool
+	X              bool
+	Youtube        string
+	Netflix        bool
+	Google         bool
+	Cloudflare     bool
+	Disney         bool
+	Gemini         bool
+	TikTok         string
+	IP             string
+	IPRisk         string
+	Country        string
+	CountryCodeTag string
 }
 
 // ProxyChecker 处理代理检测的主要结构体
@@ -70,11 +89,11 @@ func NewProxyChecker(proxyCount int) *ProxyChecker {
 
 	ProxyCount.Store(uint32(proxyCount))
 	return &ProxyChecker{
-		results:     make([]Result, 0),
+		results:     make([]Result, 0, proxyCount/4), // 预分配容量，假设约25%的节点会成功
 		proxyCount:  proxyCount,
 		threadCount: threadCount,
-		resultChan:  make(chan Result),
-		tasks:       make(chan map[string]any, 1),
+		resultChan:  make(chan Result, threadCount*2), // 增加缓冲区大小
+		tasks:       make(chan map[string]any, threadCount),
 	}
 }
 
@@ -120,8 +139,29 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 		Bucket = ratelimit.NewBucketWithRate(float64(math.MaxInt64), int64(math.MaxInt64))
 	}
 
+	// 并发进程外加载 MaxMind 数据库,避免频繁打开
+	var geoDB *maxminddb.Reader
+	var err error
+
+	// 如果为""会自动使用 subs-check 内置数据库
+	geoDB, err = assets.OpenMaxMindDB(config.GlobalConfig.MaxMindDBPath)
+
+	if err != nil {
+		slog.Debug(fmt.Sprintf("打开 MaxMind 数据库失败: %v", err))
+		geoDB = nil
+	}
+
+	// 确保数据库在函数结束时关闭
+	if geoDB != nil {
+		defer func() {
+			if err := geoDB.Close(); err != nil {
+				slog.Debug(fmt.Sprintf("关闭 MaxMind 数据库失败: %v", err))
+			}
+		}()
+	}
+
 	slog.Info("开始检测节点")
-	slog.Info("当前参数", "timeout", config.GlobalConfig.Timeout, "concurrent", config.GlobalConfig.Concurrent, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit)
+	slog.Info("当前参数", "timeout", config.GlobalConfig.Timeout, "concurrent", config.GlobalConfig.Concurrent, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit, "drop-bad-cf-nodes", config.GlobalConfig.DropBadCfNodes)
 
 	done := make(chan bool)
 	if config.GlobalConfig.PrintProgress {
@@ -131,7 +171,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	// 启动工作线程
 	for i := 0; i < pc.threadCount; i++ {
 		wg.Add(1)
-		go pc.worker(&wg)
+		go pc.worker(&wg, geoDB)
 	}
 
 	// 发送任务
@@ -167,23 +207,47 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	// 检查订阅成功率并发出警告
 	pc.checkSubscriptionSuccessRate(proxies)
 
-	return pc.results, nil
+	// 保存结果副本，避免被cleanup清空
+	results := make([]Result, len(pc.results))
+	copy(results, pc.results)
+	pc.results = nil
+
+	// 清理内存
+	pc.cleanup()
+
+	return results, nil
 }
 
 // worker 处理单个代理检测的工作线程
-func (pc *ProxyChecker) worker(wg *sync.WaitGroup) {
+func (pc *ProxyChecker) worker(wg *sync.WaitGroup, db *maxminddb.Reader) {
 	defer wg.Done()
 	for proxy := range pc.tasks {
-		if result := pc.checkProxy(proxy); result != nil {
+		// 设置 GetAnalyzedCtx 上下文,停止信号是安全的,收到停止信号会加速检测
+		GetAnalyzedCtx, stopGetAnalyzed := context.WithCancel(context.Background())
+		// 检查是否达到成功限制，如果达到则跳过当前任务
+		if config.GlobalConfig.SuccessLimit > 0 && atomic.LoadInt32(&pc.available) >= config.GlobalConfig.SuccessLimit {
+			pc.incrementProgress()
+			stopGetAnalyzed()
+			continue
+		}
+
+		if result := pc.checkProxy(proxy, db, GetAnalyzedCtx); result != nil {
+			// 将指针转换为值类型发送到channel
 			pc.resultChan <- *result
+			// 将对象放回池中
+			resultPool.Put(result)
 		}
 		pc.incrementProgress()
+		stopGetAnalyzed()
 	}
 }
 
 // checkProxy 检测单个代理
-func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
-	res := &Result{
+func (pc *ProxyChecker) checkProxy(proxy map[string]any, db *maxminddb.Reader, GetAnalyzedCtx context.Context) *Result {
+	// 从对象池获取Result对象
+	res := resultPool.Get().(*Result)
+	// 重置Result对象
+	*res = Result{
 		Proxy: proxy,
 	}
 
@@ -195,39 +259,69 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 	httpClient := CreateClient(proxy)
 	if httpClient == nil {
 		slog.Debug(fmt.Sprintf("创建代理Client失败: %v", proxy["name"]))
+		// 将对象放回池中
+		resultPool.Put(res)
 		return nil
 	}
 	defer httpClient.Close()
 
-	cloudflare, err := platform.CheckCloudflare(httpClient.Client)
-	if err != nil || !cloudflare {
+	gstatic, err := platform.CheckGstatic(httpClient.Client)
+	if err != nil || !gstatic {
+		slog.Debug(fmt.Sprintf("无法访问Gstatic: %v", proxy["name"]))
+		// 将对象放回池中
+		resultPool.Put(res)
 		return nil
 	}
 
 	google, err := platform.CheckGoogle(httpClient.Client)
 	if err != nil || !google {
+		// 将对象放回池中
+		resultPool.Put(res)
 		return nil
+	}
+
+	if config.GlobalConfig.DropBadCfNodes {
+		if cloudflare, _, _ := platform.CheckCloudflare(httpClient.Client); !cloudflare {
+			// 节点可用，但无法访问cloudflare，说明是未正确设置proxyip的cf节点
+			slog.Debug(fmt.Sprintf("%v 无法访问Cloudflare, 已丢弃", proxy["name"]))
+			// 将对象放回池中
+			resultPool.Put(res)
+			return nil
+		}
 	}
 
 	var speed int
 	if config.GlobalConfig.SpeedTestUrl != "" {
 		speed, _, err = platform.CheckSpeed(httpClient.Client, Bucket)
 		if err != nil || speed < config.GlobalConfig.MinSpeed {
+			// 将对象放回池中
+			resultPool.Put(res)
 			return nil
 		}
 	}
 
 	if config.GlobalConfig.MediaCheck {
+		cloudflare, _, _ := platform.CheckCloudflare(httpClient.Client)
 		// 遍历需要检测的平台
 		for _, plat := range config.GlobalConfig.Platforms {
-			switch plat {
-			case "openai":
-				cookiesOK, clientOK := platform.CheckOpenAI(httpClient.Client)
-				if clientOK && cookiesOK {
-					res.Openai = true
-				} else if cookiesOK || clientOK {
-					res.OpenaiWeb = true
+			if cloudflare {
+				// 只在能访问 cloudflare 时检测 openAI 和 X,因为都使用了 Cloudflare 的 CDN
+				switch plat {
+				case "x":
+					// 由于 x 并不限制国家,理论上只要能访问 cloudflare 就能访问 x
+					// 也许有更准确的方案?
+					res.X = true
+				case "openai":
+					cookiesOK, clientOK := platform.CheckOpenAI(httpClient.Client)
+					if clientOK && cookiesOK {
+						res.Openai = true
+					} else if cookiesOK || clientOK {
+						res.OpenaiWeb = true
+					}
 				}
+			}
+
+			switch plat {
 			case "youtube":
 				if region, _ := platform.CheckYoutube(httpClient.Client); region != "" {
 					res.Youtube = region
@@ -244,13 +338,20 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 				if ok, _ := platform.CheckGemini(httpClient.Client); ok {
 					res.Gemini = true
 				}
+			case "tiktok":
+				if region, _ := platform.CheckTikTok(httpClient.Client); region != "" {
+					res.TikTok = region
+				}
 			case "iprisk":
-				country, ip := proxyutils.GetProxyCountry(httpClient.Client)
+				country, ip, countryCode_tag, _ := proxyutils.GetProxyCountry(httpClient.Client, db, GetAnalyzedCtx)
 				if ip == "" {
 					break
 				}
+
 				res.IP = ip
 				res.Country = country
+				res.CountryCodeTag = countryCode_tag
+
 				risk, err := platform.CheckIPRisk(httpClient.Client, ip)
 				if err == nil {
 					res.IPRisk = risk
@@ -258,28 +359,24 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 					// 失败的可能性高，所以放上日志
 					slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
 				}
-			case "tiktok":
-				if region, _ := platform.CheckTikTok(httpClient.Client); region != "" {
-					res.TikTok = region
-				}
 			}
 		}
 	}
 	// 更新代理名称
-	pc.updateProxyName(res, httpClient, speed)
+	pc.updateProxyName(res, httpClient, speed, db, GetAnalyzedCtx)
 	pc.incrementAvailable()
 	return res
 }
 
 // updateProxyName 更新代理名称
-func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, speed int) {
+func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, speed int, db *maxminddb.Reader, stopGetAnalyzed context.Context) {
 	// 以节点IP查询位置重命名节点
 	if config.GlobalConfig.RenameNode {
 		if res.Country != "" {
-			res.Proxy["name"] = config.GlobalConfig.NodePrefix + proxyutils.Rename(res.Country)
+			res.Proxy["name"] = config.GlobalConfig.NodePrefix + proxyutils.Rename(res.Country, res.CountryCodeTag)
 		} else {
-			country, _ := proxyutils.GetProxyCountry(httpClient.Client)
-			res.Proxy["name"] = config.GlobalConfig.NodePrefix + proxyutils.Rename(country)
+			country, _, countryCode_tag, _ := proxyutils.GetProxyCountry(httpClient.Client, db, stopGetAnalyzed)
+			res.Proxy["name"] = config.GlobalConfig.NodePrefix + proxyutils.Rename(country, countryCode_tag)
 		}
 	}
 
@@ -289,7 +386,7 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 	var tags []string
 	// 获取速度
 	if config.GlobalConfig.SpeedTestUrl != "" {
-		name = regexp.MustCompile(`\s*\|(?:\s*[\d.]+[KM]B/s)`).ReplaceAllString(name, "")
+		name = speedRegex.ReplaceAllString(name, "")
 		var speedStr string
 		if speed < 1024 {
 			speedStr = fmt.Sprintf("%dKB/s", speed)
@@ -301,7 +398,7 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 
 	if config.GlobalConfig.MediaCheck {
 		// 移除已有的标记（IPRisk和平台标记）
-		name = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT⁺|GPT|GM|YT-[^|]+|TK-[^|]+|\d+%)`).ReplaceAllString(name, "")
+		name = platformRegex.ReplaceAllString(name, "")
 	}
 
 	// 按用户输入顺序定义
@@ -312,6 +409,10 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 				tags = append(tags, "GPT⁺")
 			} else if res.OpenaiWeb {
 				tags = append(tags, "GPT")
+			}
+		case "x":
+			if res.X {
+				tags = append(tags, "X")
 			}
 		case "netflix":
 			if res.Netflix {
@@ -331,6 +432,7 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 			}
 		case "youtube":
 			if res.Youtube != "" {
+				// TODO: 位置准确之后，除了CN之外，似乎没必要加后缀了
 				tags = append(tags, fmt.Sprintf("YT-%s", res.Youtube))
 			}
 		case "tiktok":
@@ -344,13 +446,16 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 		tags = append(tags, tag)
 	}
 
-	// 将所有标记添加到名称中
+	// 将所有标记添加到名称中，使用strings.Builder优化字符串拼接
 	if len(tags) > 0 {
-		name += "|" + strings.Join(tags, "|")
+		var builder strings.Builder
+		builder.WriteString(name)
+		builder.WriteString("|")
+		builder.WriteString(strings.Join(tags, "|"))
+		res.Proxy["name"] = builder.String()
+	} else {
+		res.Proxy["name"] = name
 	}
-
-	res.Proxy["name"] = name
-
 }
 
 // showProgress 显示进度条
@@ -371,7 +476,7 @@ func (pc *ProxyChecker) showProgress(done chan bool) {
 
 			// if 0/0 = NaN ,shoule panic
 			percent := float64(current) / float64(pc.proxyCount) * 100
-			fmt.Printf("\r进度: [%-45s] %.1f%% (%d/%d) 可用: %d",
+			fmt.Printf("\r进度: [%-42s] %.1f%% (%d/%d) 可用: %d",
 				strings.Repeat("=", int(percent/2))+">",
 				percent,
 				current,
@@ -397,6 +502,7 @@ func (pc *ProxyChecker) incrementAvailable() {
 func (pc *ProxyChecker) distributeProxies(proxies []map[string]any) {
 	for _, proxy := range proxies {
 		if config.GlobalConfig.SuccessLimit > 0 && atomic.LoadInt32(&pc.available) >= config.GlobalConfig.SuccessLimit {
+			slog.Debug("达到成功节点数量限制，停止派发新任务")
 			break
 		}
 		if ForceClose.Load() {
@@ -466,6 +572,21 @@ func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any
 	}
 }
 
+// cleanup 清理内存和资源
+func (pc *ProxyChecker) cleanup() {
+	// 清理结果切片，释放内存
+	if len(pc.results) > 0 {
+		// 清空结果切片，但保留容量以避免重新分配
+		pc.results = pc.results[:0]
+	}
+
+	// 强制垃圾回收
+	runtime.GC()
+
+	// 释放操作系统内存
+	debug.FreeOSMemory()
+}
+
 // CreateClient creates and returns an http.Client with a Close function
 type ProxyClient struct {
 	*http.Client
@@ -526,6 +647,12 @@ func (pc *ProxyClient) Close() {
 
 	if pc.Transport != nil {
 		TotalBytes.Add(atomic.LoadUint64(&pc.Transport.BytesRead))
+		// 清理Transport资源
+		if pc.Transport.Base != nil {
+			if transport, ok := pc.Transport.Base.(*http.Transport); ok {
+				transport.CloseIdleConnections()
+			}
+		}
 	}
 	pc.Transport = nil
 }

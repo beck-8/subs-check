@@ -127,6 +127,7 @@ func GetDateFromSubs(subUrl string) ([]byte, error) {
 	client := &http.Client{
 		Timeout: time.Duration(timeout) * time.Second,
 	}
+	defer client.CloseIdleConnections()
 
 	for i := 0; i < maxRetries; i++ {
 		if i > 0 {

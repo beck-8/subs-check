@@ -3,6 +3,8 @@ package proxies
 import (
 	"strconv"
 	"sync"
+
+	"github.com/beck-8/subs-check/config"
 )
 
 var (
@@ -10,13 +12,26 @@ var (
 	counterLock = sync.Mutex{}
 )
 
-func Rename(name string) string {
+func Rename(name, countryCodeTag string) string {
+	flag := CountryCodeToFlag(name)
+
+	key, label := name, name
+	if config.GlobalConfig.EnhancedTag {
+		if countryCodeTag != "" {
+			key, label = countryCodeTag, countryCodeTag
+		} else {
+			// fallback 添加 "ˣ" 角标, 例如: "HKˣ"
+			label = name + "ˣ"
+			key = label
+		}
+	}
+
 	counterLock.Lock()
-	defer counterLock.Unlock()
+	counter[key]++
+	n := counter[key]
+	counterLock.Unlock()
 
-	counter[name]++
-	return CountryCodeToFlag(name) + name + "_" + strconv.Itoa(counter[name])
-
+	return flag + label + "_" + strconv.Itoa(n)
 }
 
 // ResetRenameCounter 将所有计数器重置为 0
