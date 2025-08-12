@@ -16,7 +16,7 @@ check-interval: 120
 # 保存几个成功的节点，为0代表不限制 
 # 如果你的并发数量超过这个参数，那么成功的结果可能会大于这个数值
 # success-limit <= success <= success-limit+concurrent
-success-limit: 0
+success-limit: 200
 
 # 超时时间(毫秒)(节点的最大延迟)
 timeout: 5000
@@ -50,20 +50,37 @@ node-prefix: ""
 media-check: false
 platforms:
   - iprisk
+  - openai
+  - gemini
   - tiktok
   - youtube
   - netflix
   - disney
-  - openai
-  - gemini
+  - x
 
-# 保留之前测试成功的节点
-# 如果为true，则保留之前测试成功的节点，这样就不会因为上游链接更新，导致可用的节点被清除掉
-keep-success-proxies: false
+# 是否丢弃无法访问 cloudflare 的节点(可正常访问Google等,默认保留,修改会导致可用节点急剧减少,且有大概率误杀)
+drop-bad-cf-nodes: false
+
+# 增强的位置显示开关,默认关闭
+# 无法访问 CF 的 CF 节点: HK⁻¹
+# 正常访问 CF: a.出口位置与cdn位置一致: HK¹⁺; b.位置不一致: HK¹-US⁰
+# 非 CF 节点,直接显示: HK²
+# 未获取到位置: HKˣ (使用原方案)
+# 前两位字母是实际浏览网站识别的位置,-US⁰为使用CF CDN服务的网站识别的位置,比如GPT, X等
+enhanced-tag: false
+
+# MaxMind 地理数据库路径
+# 如果为空，则使用内置的数据库文件（解压到output目录）
+# 可以指定本地数据库文件路径，如：/path/to/GeoLite2-Country.mmdb
+maxmind-db-path: ""
 
 # 输出目录
 # 如果为空，则为程序所在目录的config目录
 output-dir: ""
+
+# 保留之前测试成功的节点
+# 如果为true，则保留之前测试成功的节点，这样就不会因为上游链接更新，导致可用的节点被清除掉
+keep-success-proxies: false
 
 # 是否启用Web控制面板
 # 如果为false，则不启动Web控制界面，仅启动订阅服务相关接口
@@ -119,14 +136,14 @@ sub-store-push-service: ""
 # 覆写订阅的url，这个的作用是生成带指定规则的mihomo/clash.meta订阅链接
 # 防止网络不好，所以现在内置，依赖:8199端口
 # 如果你想替换其他的自定义覆写文件，自己命名后放在output目录，然后更改此URL后缀即可
-mihomo-overwrite-url: "http://127.0.0.1:8199/sub/ACL4SSR_Online_Full.yaml"
+mihomo-overwrite-url: http://127.0.0.1:8199/sub/ACL4SSR_Online_Full.yaml
 
 # 保存方法
 # 目前支持的保存方法: r2, local, gist, webdav, s3
 save-method: local
 
 # webdav
-webdav-url: "https://example.com/dav/"
+webdav-url: https://example.com/dav/
 webdav-username: "admin"
 webdav-password: "admin"
 
@@ -174,22 +191,22 @@ sub-urls:
   # - https://raw.githubusercontent.com/example/repo/main/config/{Ymd}.yaml
   # - https://raw.githubusercontent.com/example/repo/main/daily/daily-{Y}-{m}-{d}.yaml
   # - https://example.com/sub.txt#我是备注我是备注
-  - "https://raw.githubusercontent.com/firefoxmmx2/v2rayshare_subcription/main/subscription/clash_sub.yaml"
-  - "https://raw.githubusercontent.com/Q3dlaXpoaQ/V2rayN_Clash_Node_Getter/refs/heads/main/APIs/sc0.yaml"
-  - "https://raw.githubusercontent.com/xiaoji235/airport-free/refs/heads/main/clash/naidounode.txt"
-  - "https://raw.githubusercontent.com/mahdibland/SSAggregator/master/sub/sub_merge_yaml.yml"
-  - "https://raw.githubusercontent.com/snakem982/proxypool/main/source/clash-meta.yaml"
-  - "https://raw.githubusercontent.com/chengaopan/AutoMergePublicNodes/master/list.yml"
-  - "https://raw.githubusercontent.com/zhangkaiitugithub/passcro/main/speednodes.yaml"
-  - "https://raw.githubusercontent.com/aiboboxx/v2rayfree/refs/heads/main/README.md"
-  - "https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.meta.yml"
-  - "https://raw.githubusercontent.com/anaer/Sub/refs/heads/main/clash.yaml"
-  - "https://raw.githubusercontent.com/free18/v2ray/refs/heads/main/c.yaml"
-  - "https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.yml"
-  - "https://raw.githubusercontent.com/Ruk1ng001/freeSub/main/clash.yaml"
-  - "https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/all_configs.txt"
-  - "https://raw.githubusercontent.com/ripaojiedian/freenode/main/clash"
-  - "https://raw.githubusercontent.com/go4sharing/sub/main/sub.yaml"
+  - https://raw.githubusercontent.com/firefoxmmx2/v2rayshare_subcription/main/subscription/clash_sub.yaml
+  - https://raw.githubusercontent.com/Q3dlaXpoaQ/V2rayN_Clash_Node_Getter/refs/heads/main/APIs/sc0.yaml
+  - https://raw.githubusercontent.com/xiaoji235/airport-free/refs/heads/main/clash/naidounode.txt
+  - https://raw.githubusercontent.com/mahdibland/SSAggregator/master/sub/sub_merge_yaml.yml
+  - https://raw.githubusercontent.com/snakem982/proxypool/main/source/clash-meta.yaml
+  - https://raw.githubusercontent.com/chengaopan/AutoMergePublicNodes/master/list.yml
+  - https://raw.githubusercontent.com/zhangkaiitugithub/passcro/main/speednodes.yaml
+  - https://raw.githubusercontent.com/aiboboxx/v2rayfree/refs/heads/main/README.md
+  - https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.meta.yml
+  - https://raw.githubusercontent.com/anaer/Sub/refs/heads/main/clash.yaml
+  - https://raw.githubusercontent.com/free18/v2ray/refs/heads/main/c.yaml
+  - https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list.yml
+  - https://raw.githubusercontent.com/Ruk1ng001/freeSub/main/clash.yaml
+  - https://raw.githubusercontent.com/SoliSpirit/v2ray-configs/main/all_configs.txt
+  - https://raw.githubusercontent.com/ripaojiedian/freenode/main/clash
+  - https://raw.githubusercontent.com/go4sharing/sub/main/sub.yaml
   - https://raw.githubusercontent.com/actionsfz/v2ray/refs/heads/master/all.yaml
   - https://raw.githubusercontent.com/Pawdroid/Free-servers/refs/heads/main/sub
   - https://raw.githubusercontent.com/aiboboxx/v2rayfree/refs/heads/main/v2

@@ -240,6 +240,7 @@ func (app *App) checkProxies() error {
 
 	// 执行回调脚本
 	utils.ExecuteCallback(len(results))
+	results = nil // 清理结果，释放内存
 
 	return nil
 }

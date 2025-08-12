@@ -11,3 +11,7 @@ mihomo-check*
 .vscode
 
 .DS_Store
+
+*.ps1
+*.bak
+bin/*
