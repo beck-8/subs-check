@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -212,6 +213,7 @@ func (app *App) triggerCheck() {
 			slog.Info(fmt.Sprintf("下次检查时间: %s", nextTime.Format("2006-01-02 15:04:05")))
 		}
 	}
+	debug.FreeOSMemory()
 }
 
 // checkProxies 执行代理检测

@@ -103,15 +103,7 @@ func (cs *ConfigSaver) categorizeProxies() {
 	for _, result := range cs.results {
 		for i := range cs.categories {
 			if cs.categories[i].Filter(result) {
-				// 创建Proxy的副本，避免修改原始数据
-				proxyCopy := make(map[string]any, len(result.Proxy))
-				for k, v := range result.Proxy {
-					proxyCopy[k] = v
-				}
-				// 在保存时清理这些字段
-				delete(proxyCopy, "sub_url")
-				delete(proxyCopy, "sub_tag")
-				cs.categories[i].Proxies = append(cs.categories[i].Proxies, proxyCopy)
+				cs.categories[i].Proxies = append(cs.categories[i].Proxies, result.Proxy)
 			}
 		}
 	}

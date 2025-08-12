@@ -47,7 +47,7 @@ rename-node: true
 node-prefix: ""
 
 # 是否开启流媒体检测，其中IP欺诈依赖重命名
-media-check: true
+media-check: false
 platforms:
   - iprisk
   - openai
