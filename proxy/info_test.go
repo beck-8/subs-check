@@ -1,15 +1,17 @@
 package proxies
 
 import (
+	"context"
+	"fmt"
 	"net/http"
-	"os"
 	"testing"
+	"time"
 
 	"github.com/beck-8/subs-check/assets"
 	"github.com/sinspired/checkip/pkg/ipinfo"
 )
 
-func TestGetMixed(t *testing.T) {
+func TestGetAnalyzed(t *testing.T) {
 	// 使用 subs-check 自己的 assets 包
 	db, err := assets.OpenMaxMindDB("")
 
@@ -27,17 +29,38 @@ func TestGetMixed(t *testing.T) {
 			}
 		}()
 	}
-	httpClient := &http.Client{}
-	// 设置一个临时环境变量，以排除部分api数据库未更新返回的 CN
-	os.Setenv("SUBS-CHECK-CALL", "true")
-	defer os.Unsetenv("SUBS-CHECK-CALL")
-	loc, ip, countryCode_tag, err := ipinfo.GetMixed(httpClient, db)
+	// os.Setenv("SUBS-CHECK-CALL", "true")
+	// defer os.Unsetenv("SUBS-CHECK-CALL")
+	cli, err := ipinfo.New(
+		ipinfo.WithHttpClient(&http.Client{}),
+		ipinfo.WithDBReader(db),
+		ipinfo.WithIPAPIs(
+			"https://check.torproject.org/api/ip",
+			"https://qifu-api.baidubce.com/ip/local/geo/v1/district",
+			"https://r.inews.qq.com/api/ip2city",
+			"https://g3.letv.com/r?format=1",
+			"https://cdid.c-ctrip.com/model-poc2/h",
+			"https://whois.pconline.com.cn/ipJson.jsp",
+			"https://api.live.bilibili.com/xlive/web-room/v1/index/getIpInfo",
+			"https://6.ipw.cn/",                  // IPv4使用了 CFCDN, IPv6 位置准确
+			"https://api6.ipify.org?format=json", // IPv4使用了 CFCDN, IPv6 位置准确
+		),
+		ipinfo.WithGeoAPIs(
+			"https://ident.me/json",
+			"https://tnedi.me/json",
+			"https://api.seeip.org/geoip",
+		),
+	)
 	if err != nil {
-		t.Errorf("获取代理国家信息失败: %v", err)
+		t.Errorf("%s", fmt.Sprintf("创建 ipinfo 客户端失败: %s", err))
+	}
+	defer cli.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	loc, _, countryCode_tag, _ := cli.GetAnalyzed(ctx)
+	if loc != "" && countryCode_tag != "" {
+		t.Logf("GetAnalyzed 获取节点位置成功: %s %s", loc, countryCode_tag)
 	} else {
-		t.Logf("位置: %s, IP: %s, 标签: %s", loc, ip, countryCode_tag)
-		if loc == "" || ip == "" || countryCode_tag == "" {
-			t.Error("获取的国家信息或IP地址不完整")
-		}
+		t.Error("未获取到数据，说明api不可用，或者查询逻辑未涵盖")
 	}
 }

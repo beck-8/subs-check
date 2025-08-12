@@ -31,7 +31,7 @@ import (
 // 预编译的正则表达式，避免重复编译
 var (
 	speedRegex    = regexp.MustCompile(`\s*\|(?:\s*[\d.]+[KM]B/s)`)
-	platformRegex = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT⁺|GPT|X|GM|YT-[^|]+|TK-[^|]+|\d+%)`)
+	platformRegex = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT⁺|X|GPT|GM|YT-[^|]+|TK-[^|]+|\d+%)`)
 
 	// Result对象池，用于复用Result对象
 	resultPool = sync.Pool{
@@ -222,24 +222,28 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 func (pc *ProxyChecker) worker(wg *sync.WaitGroup, db *maxminddb.Reader) {
 	defer wg.Done()
 	for proxy := range pc.tasks {
+		// 设置 GetAnalyzedCtx 上下文,停止信号是安全的,收到停止信号会加速检测
+		GetAnalyzedCtx, stopGetAnalyzed := context.WithCancel(context.Background())
 		// 检查是否达到成功限制，如果达到则跳过当前任务
 		if config.GlobalConfig.SuccessLimit > 0 && atomic.LoadInt32(&pc.available) >= config.GlobalConfig.SuccessLimit {
 			pc.incrementProgress()
+			stopGetAnalyzed()
 			continue
 		}
 
-		if result := pc.checkProxy(proxy, db); result != nil {
+		if result := pc.checkProxy(proxy, db, GetAnalyzedCtx); result != nil {
 			// 将指针转换为值类型发送到channel
 			pc.resultChan <- *result
 			// 将对象放回池中
 			resultPool.Put(result)
 		}
 		pc.incrementProgress()
+		stopGetAnalyzed()
 	}
 }
 
 // checkProxy 检测单个代理
-func (pc *ProxyChecker) checkProxy(proxy map[string]any, db *maxminddb.Reader) *Result {
+func (pc *ProxyChecker) checkProxy(proxy map[string]any, db *maxminddb.Reader, GetAnalyzedCtx context.Context) *Result {
 	// 从对象池获取Result对象
 	res := resultPool.Get().(*Result)
 	// 重置Result对象
@@ -301,21 +305,18 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any, db *maxminddb.Reader) *
 		// 遍历需要检测的平台
 		for _, plat := range config.GlobalConfig.Platforms {
 			if cloudflare {
-				// openAI和X都使用了 Cloudflare 的CDN
+				// 只在能访问 cloudflare 时检测 openAI 和 X,因为都使用了 Cloudflare 的 CDN
 				switch plat {
+				case "x":
+					// 由于 x 并不限制国家,理论上只要能访问 cloudflare 就能访问 x
+					// 也许有更准确的方案?
+					res.X = true
 				case "openai":
 					cookiesOK, clientOK := platform.CheckOpenAI(httpClient.Client)
 					if clientOK && cookiesOK {
 						res.Openai = true
 					} else if cookiesOK || clientOK {
 						res.OpenaiWeb = true
-					}
-				case "x":
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer cancel()
-					loc, ip := platform.GetCFProxy(httpClient.Client, ctx, "https://x.com")
-					if loc != "" && ip != "" {
-						res.X = true
 					}
 				}
 			}
@@ -342,7 +343,7 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any, db *maxminddb.Reader) *
 					res.TikTok = region
 				}
 			case "iprisk":
-				country, ip, countryCode_tag, _ := proxyutils.GetProxyCountry(httpClient.Client, db)
+				country, ip, countryCode_tag, _ := proxyutils.GetProxyCountry(httpClient.Client, db, GetAnalyzedCtx)
 				if ip == "" {
 					break
 				}
@@ -362,19 +363,19 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any, db *maxminddb.Reader) *
 		}
 	}
 	// 更新代理名称
-	pc.updateProxyName(res, httpClient, speed, db)
+	pc.updateProxyName(res, httpClient, speed, db, GetAnalyzedCtx)
 	pc.incrementAvailable()
 	return res
 }
 
 // updateProxyName 更新代理名称
-func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, speed int, db *maxminddb.Reader) {
+func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, speed int, db *maxminddb.Reader, stopGetAnalyzed context.Context) {
 	// 以节点IP查询位置重命名节点
 	if config.GlobalConfig.RenameNode {
 		if res.Country != "" {
 			res.Proxy["name"] = config.GlobalConfig.NodePrefix + proxyutils.Rename(res.Country, res.CountryCodeTag)
 		} else {
-			country, _, countryCode_tag, _ := proxyutils.GetProxyCountry(httpClient.Client, db)
+			country, _, countryCode_tag, _ := proxyutils.GetProxyCountry(httpClient.Client, db, stopGetAnalyzed)
 			res.Proxy["name"] = config.GlobalConfig.NodePrefix + proxyutils.Rename(country, countryCode_tag)
 		}
 	}

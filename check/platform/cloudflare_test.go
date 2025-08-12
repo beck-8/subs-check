@@ -13,8 +13,8 @@ func TestGetCFProxy(t *testing.T) {
 	defer cancel()
 	httpClient := &http.Client{}
 	success := false
-	for _, url := range cfCdnAPIs {
-		loc, ip := GetCFProxy(httpClient, ctx, url)
+	for _, url := range CF_CDN_APIS {
+		loc, ip := FetchCFTrace(httpClient, ctx, url)
 		if loc == "" || ip == "" {
 			t.Logf("%s GetCFProxy 失败: loc=%s, ip=%s", url, loc, ip)
 		} else {
@@ -29,7 +29,7 @@ func TestGetCFProxy(t *testing.T) {
 
 func TestFetchCFProxy(t *testing.T) {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
-	loc, ip := FetchCFProxy(httpClient)
+	loc, ip := GetCFTrace(httpClient)
 	if loc == "" || ip == "" {
 		t.Error("FetchCFProxy 失败: 未获取 loc 和 ip")
 	} else {

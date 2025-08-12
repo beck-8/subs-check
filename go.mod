@@ -8,7 +8,7 @@ require (
 	github.com/metacubex/mihomo v1.19.12
 	github.com/minio/minio-go/v7 v7.0.95
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/sinspired/checkip v0.1.0
+	github.com/sinspired/checkip v0.2.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

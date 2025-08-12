@@ -12,17 +12,26 @@ var (
 	counterLock = sync.Mutex{}
 )
 
-func Rename(name string, countryCodeTag string) string {
-	counterLock.Lock()
-	defer counterLock.Unlock()
+func Rename(name, countryCodeTag string) string {
+	flag := CountryCodeToFlag(name)
 
+	key, label := name, name
 	if config.GlobalConfig.EnhancedTag {
-		// 即使开启增强标签,依然使用 name 解析国旗, name 实际就是 countryCodeTag 的前两位
-		counter[countryCodeTag]++
-		return CountryCodeToFlag(name) + countryCodeTag + "_" + strconv.Itoa(counter[countryCodeTag])
+		if countryCodeTag != "" {
+			key, label = countryCodeTag, countryCodeTag
+		} else {
+			// fallback 添加 "ˣ" 角标, 例如: "HKˣ"
+			label = name + "ˣ"
+			key = label
+		}
 	}
-	counter[name]++
-	return CountryCodeToFlag(name) + name + "_" + strconv.Itoa(counter[name])
+
+	counterLock.Lock()
+	counter[key]++
+	n := counter[key]
+	counterLock.Unlock()
+
+	return flag + label + "_" + strconv.Itoa(n)
 }
 
 // ResetRenameCounter 将所有计数器重置为 0

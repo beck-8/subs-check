@@ -218,8 +218,8 @@ github.com/sina-ghaderi/rabaead v0.0.0-20220730151906-ab6e06b96e8c h1:DjKMC30y6y
 github.com/sina-ghaderi/rabaead v0.0.0-20220730151906-ab6e06b96e8c/go.mod h1:NV/a66PhhWYVmUMaotlXJ8fIEFB98u+c8l/CQIEFLrU=
 github.com/sina-ghaderi/rabbitio v0.0.0-20220730151941-9ce26f4f872e h1:ur8uMsPIFG3i4Gi093BQITvwH9znsz2VUZmnmwHvpIo=
 github.com/sina-ghaderi/rabbitio v0.0.0-20220730151941-9ce26f4f872e/go.mod h1:+e5fBW3bpPyo+3uLo513gIUblc03egGjMM0+5GKbzK8=
-github.com/sinspired/checkip v0.1.0 h1:jwfv5CaGOyK+FZGmDoeF859QNul2FTU5KX8CG6tTonY=
-github.com/sinspired/checkip v0.1.0/go.mod h1:NfoEknDmlBewXlyLlyzFbZbTmNtonXwQPATtz5IKk2g=
+github.com/sinspired/checkip v0.2.0 h1:xU86BKFhvBsqTrsxxBMh+lFK7r81qXEQ1oobHRCX3Sk=
+github.com/sinspired/checkip v0.2.0/go.mod h1:NfoEknDmlBewXlyLlyzFbZbTmNtonXwQPATtz5IKk2g=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
