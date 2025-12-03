@@ -34,6 +34,7 @@ type Result struct {
 	Cloudflare bool
 	Disney     bool
 	Gemini     bool
+	Grok       bool  // 新增：Grok (xAI) 解锁
 	TikTok     string
 	IP         string
 	IPRisk     string
@@ -238,6 +239,10 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 				if ok, _ := platform.CheckGemini(httpClient.Client); ok {
 					res.Gemini = true
 				}
+			case "grok":  // 新增
+			    if ok, _ := platform.CheckGrok(httpClient.Client); ok {
+			        res.Grok = true
+			    }
 			case "iprisk":
 				country, ip := proxyutils.GetProxyCountry(httpClient.Client)
 				if ip == "" {
@@ -294,8 +299,8 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 	}
 
 	if config.GlobalConfig.MediaCheck {
-		// 移除已有的标记（IPRisk和平台标记）
-		name = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT⁺|GPT|GM|YT-[^|]+|TK-[^|]+|\d+%)`).ReplaceAllString(name, "")
+	    // 移除已有的标记（IPRisk和平台标记），新增 G
+	    name = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT⁺|GPT|GM|G|YT-[^|]+|TK-[^|]+|\d+%)`).ReplaceAllString(name, "")
 	}
 
 	// 按用户输入顺序定义
@@ -319,6 +324,10 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 			if res.Gemini {
 				tags = append(tags, "GM")
 			}
+		case "grok":  // 新增
+		    if res.Grok {
+		        tags = append(tags, "G")  // 大写 G，与 GPT⁺、NF 等风格统一
+		    }
 		case "iprisk":
 			if res.IPRisk != "" {
 				tags = append(tags, res.IPRisk)
