@@ -65,6 +65,23 @@ platforms:
   - disney
   - openai
   - gemini
+  - grok
+
+# 结果过滤器：只有满足条件的节点才会被保留到最终结果
+# 支持 and / or 逻辑，标签完全对应 updateProxyName 里打的那些
+filter: |
+  # 必须同时满足以下任意一条才保留
+  GPT⁺ and YB          # 同时解锁 ChatGPT + YouTube Premium
+  or GPT⁺ and G        # ChatGPT + Grok
+  or YB and G          # YouTube Premium + Grok
+  or (GPT⁺ and YB and G)  # 三者全解锁（当然也保留）
+
+# 如果你更宽松，只要有其中任意两个也行，可以简写成：
+# filter: |
+#   (GPT⁺ and YB) or (GPT⁺ and G) or (YB and G)
+
+# 如果你只想要三者都有的极品节点（最严格）：
+# filter: GPT⁺ and YB and G
 
 # 保留之前测试成功的节点
 # 如果为true，则保留之前测试成功的节点，这样就不会因为上游链接更新，导致可用的节点被清除掉
