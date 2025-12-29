@@ -217,9 +217,10 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 		if mediaTimeout <= 0 {
 			mediaTimeout = 10
 		}
-		mediaClientCopy := *httpClient.Client
-		mediaClientCopy.Timeout = time.Duration(mediaTimeout) * time.Second
-		mediaClient = &mediaClientCopy
+		mediaClient = &http.Client{
+			Transport: httpClient.Client.Transport,
+			Timeout:   time.Duration(mediaTimeout) * time.Second,
+		}
 
 		// 遍历需要检测的平台
 		for _, plat := range config.GlobalConfig.Platforms {
