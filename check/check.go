@@ -211,41 +211,50 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 		}
 	}
 
+	var mediaClient *http.Client
 	if config.GlobalConfig.MediaCheck {
+		mediaTimeout := config.GlobalConfig.MediaCheckTimeout
+		if mediaTimeout <= 0 {
+			mediaTimeout = 10
+		}
+		mediaClientCopy := *httpClient.Client
+		mediaClientCopy.Timeout = time.Duration(mediaTimeout) * time.Second
+		mediaClient = &mediaClientCopy
+
 		// 遍历需要检测的平台
 		for _, plat := range config.GlobalConfig.Platforms {
 			switch plat {
 			case "openai":
-				cookiesOK, clientOK := platform.CheckOpenAI(httpClient.Client)
+				cookiesOK, clientOK := platform.CheckOpenAI(mediaClient)
 				if clientOK && cookiesOK {
 					res.Openai = true
 				} else if cookiesOK || clientOK {
 					res.OpenaiWeb = true
 				}
 			case "youtube":
-				if region, _ := platform.CheckYoutube(httpClient.Client); region != "" {
+				if region, _ := platform.CheckYoutube(mediaClient); region != "" {
 					res.Youtube = region
 				}
 			case "netflix":
-				if ok, _ := platform.CheckNetflix(httpClient.Client); ok {
+				if ok, _ := platform.CheckNetflix(mediaClient); ok {
 					res.Netflix = true
 				}
 			case "disney":
-				if ok, _ := platform.CheckDisney(httpClient.Client); ok {
+				if ok, _ := platform.CheckDisney(mediaClient); ok {
 					res.Disney = true
 				}
 			case "gemini":
-				if ok, _ := platform.CheckGemini(httpClient.Client); ok {
+				if ok, _ := platform.CheckGemini(mediaClient); ok {
 					res.Gemini = true
 				}
 			case "iprisk":
-				country, ip := proxyutils.GetProxyCountry(httpClient.Client)
+				country, ip := proxyutils.GetProxyCountry(mediaClient)
 				if ip == "" {
 					break
 				}
 				res.IP = ip
 				res.Country = country
-				risk, err := platform.CheckIPRisk(httpClient.Client, ip)
+				risk, err := platform.CheckIPRisk(mediaClient, ip)
 				if err == nil {
 					res.IPRisk = risk
 				} else {
@@ -253,7 +262,7 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 					slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
 				}
 			case "tiktok":
-				if region, _ := platform.CheckTikTok(httpClient.Client); region != "" {
+				if region, _ := platform.CheckTikTok(mediaClient); region != "" {
 					res.TikTok = region
 				}
 			}
