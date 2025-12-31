@@ -1,85 +1,39 @@
-name: Release
+name: Manual Build and Push Docker Image
 
 on:
   # 移除 push 触发器，仅保留手动触发
   workflow_dispatch: 
-      
+
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
-  releaser:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: Tag
-        run: git fetch --force --tags
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: stable
-      - name: Release
-        uses: goreleaser/goreleaser-action@v4
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
-          tags: |
-            # 如果 tag 包含 "beta"，只生成具体的版本标签
-            type=match,pattern=^(.*-beta.*)$,group=1,enable=${{ contains(github.ref_name, 'beta') }}
-            # 如果 tag 不包含 "beta"，生成版本标签
-            type=match,pattern=^v(.*)$,group=1,enable=${{ !contains(github.ref_name, 'beta') }}
-          flavor: |
-            # 明确控制 latest 标签，只有当不包含 "beta" 时才生成
-            latest=${{ !contains(github.ref_name, 'beta') }}
-          
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
+          # 这样构建出的镜像永远会带有 latest 标签，方便 CasaOS 拉取
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          build-args: |
-            GITHUB_SHA=${{ github.sha }}
-            VERSION=${{ github.ref_name }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
