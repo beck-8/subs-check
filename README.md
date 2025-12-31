@@ -77,7 +77,7 @@ github-proxy: "https://custom-domain/raw/"
 > **⚠️ 注意：** 避免使用 Speedtest 或 Cloudflare 下载链接，因为部分节点会屏蔽测速网站。
 
 1. 将 [worker.js](./doc/cloudflare/worker.js) 部署到 Cloudflare Workers。
-2. 绑定自定义域名（避免被节点屏蔽）。
+2. 绑定自定义域名（避免被节点屏蔽）。。
 3. 在配置文件中设置 `speed-test-url` 为你的 Workers 地址：
 
 ```yaml
