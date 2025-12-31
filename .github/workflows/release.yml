@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  # 移除 push 触发器，仅保留手动触发
+  workflow_dispatch: 
       
 permissions:
   contents: write
