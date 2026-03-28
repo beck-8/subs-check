@@ -5,6 +5,8 @@ import _ "embed"
 type Config struct {
 	PrintProgress        bool     `yaml:"print-progress"`
 	Concurrent           int      `yaml:"concurrent"`
+	SpeedConcurrent      int      `yaml:"speed-concurrent"`
+	MediaConcurrent      int      `yaml:"media-concurrent"`
 	CheckInterval        int      `yaml:"check-interval"`
 	CronExpression       string   `yaml:"cron-expression"`
 	AliveTestUrl         string   `yaml:"alive-test-url"`

@@ -40,41 +40,50 @@ type Result struct {
 	Country    string
 }
 
+// aliveResult 存活检测通过的中间结果
+type aliveResult struct {
+	Proxy map[string]any
+}
+
+// speedResult 测速通过的中间结果
+type speedResult struct {
+	Proxy map[string]any
+	Speed int
+}
+
 // ProxyChecker 处理代理检测的主要结构体
 type ProxyChecker struct {
-	results     []Result
-	proxyCount  int
-	threadCount int
-	progress    int32
-	available   int32
-	resultChan  chan Result
-	tasks       chan map[string]any
+	results    []Result
+	proxyCount int
+	progress   int32
+	available  int32
 }
 
 var Progress atomic.Uint32
 var Available atomic.Uint32
 var ProxyCount atomic.Uint32
 var TotalBytes atomic.Uint64
+var Phase atomic.Uint32 // 0=idle, 1=alive, 2=speed, 3=media
 
 var ForceClose atomic.Bool
+var progressPaused atomic.Bool
+var progressRendered atomic.Bool
 
 var Bucket *ratelimit.Bucket
 
-// NewProxyChecker 创建新的检测器实例
-func NewProxyChecker(proxyCount int) *ProxyChecker {
-	threadCount := config.GlobalConfig.Concurrent
-	if proxyCount < threadCount {
-		threadCount = proxyCount
+// effectiveConcurrency 计算阶段实际并发数
+func effectiveConcurrency(phaseConcurrency, fallback, itemCount int) int {
+	c := phaseConcurrency
+	if c <= 0 {
+		c = fallback
 	}
-
-	ProxyCount.Store(uint32(proxyCount))
-	return &ProxyChecker{
-		results:     make([]Result, 0),
-		proxyCount:  proxyCount,
-		threadCount: threadCount,
-		resultChan:  make(chan Result),
-		tasks:       make(chan map[string]any, 1),
+	if itemCount < c {
+		c = itemCount
 	}
+	if c < 1 {
+		c = 1
+	}
+	return c
 }
 
 // Check 执行代理检测的主函数
@@ -85,6 +94,7 @@ func Check() ([]Result, error) {
 	ProxyCount.Store(0)
 	Available.Store(0)
 	Progress.Store(0)
+	Phase.Store(0)
 
 	TotalBytes.Store(0)
 
@@ -107,11 +117,13 @@ func Check() ([]Result, error) {
 	proxies = proxyutils.DeduplicateProxies(proxies)
 	slog.Info(fmt.Sprintf("去重后节点数量: %d", len(proxies)))
 
-	checker := NewProxyChecker(len(proxies))
+	checker := &ProxyChecker{
+		results: make([]Result, 0),
+	}
 	return checker.run(proxies)
 }
 
-// Run 运行检测流程
+// run 运行三阶段检测流程
 func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	if config.GlobalConfig.TotalSpeedLimit != 0 {
 		Bucket = ratelimit.NewBucketWithRate(float64(config.GlobalConfig.TotalSpeedLimit*1024*1024), int64(config.GlobalConfig.TotalSpeedLimit*1024*1024/10))
@@ -120,42 +132,62 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	}
 
 	slog.Info("开始检测节点")
-	slog.Info("当前参数", "timeout", config.GlobalConfig.Timeout, "concurrent", config.GlobalConfig.Concurrent, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit)
+	slog.Info("当前参数", "timeout", config.GlobalConfig.Timeout, "concurrent", config.GlobalConfig.Concurrent, "speed-concurrent", config.GlobalConfig.SpeedConcurrent, "media-concurrent", config.GlobalConfig.MediaConcurrent, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit)
 
 	done := make(chan bool)
 	if config.GlobalConfig.PrintProgress {
 		go pc.showProgress(done)
 	}
-	var wg sync.WaitGroup
-	// 启动工作线程
-	for i := 0; i < pc.threadCount; i++ {
-		wg.Add(1)
-		go pc.worker(&wg)
+
+	// === Phase 1: 测活 ===
+	Phase.Store(1)
+	pc.resetPhaseCounters(len(proxies))
+
+	hasSpeedTest := config.GlobalConfig.SpeedTestUrl != ""
+	aliveConcurrency := effectiveConcurrency(config.GlobalConfig.Concurrent, config.GlobalConfig.Concurrent, len(proxies))
+	slog.Info(fmt.Sprintf("阶段1-测活: 节点数=%d, 并发数=%d", len(proxies), aliveConcurrency))
+	resumeProgress()
+	// 没有测速阶段时，SuccessLimit 在测活阶段生效
+	aliveResults := pc.runAlivePhase(proxies, aliveConcurrency, !hasSpeedTest)
+	pauseProgress()
+	slog.Info(fmt.Sprintf("存活节点数量: %d", len(aliveResults)))
+
+	// === Phase 2: 测速 (可选) ===
+	var speedResults []speedResult
+	if hasSpeedTest && len(aliveResults) > 0 {
+		Phase.Store(2)
+		pc.resetPhaseCounters(len(aliveResults))
+
+		speedConcurrency := effectiveConcurrency(config.GlobalConfig.SpeedConcurrent, config.GlobalConfig.Concurrent, len(aliveResults))
+		slog.Info(fmt.Sprintf("阶段2-测速: 节点数=%d, 并发数=%d", len(aliveResults), speedConcurrency))
+		resumeProgress()
+		speedResults = pc.runSpeedPhase(aliveResults, speedConcurrency)
+		pauseProgress()
+		slog.Info(fmt.Sprintf("测速通过节点数量: %d", len(speedResults)))
+	} else {
+		// 无测速：直接转换
+		for _, a := range aliveResults {
+			speedResults = append(speedResults, speedResult{Proxy: a.Proxy, Speed: 0})
+		}
 	}
 
-	// 发送任务
-	go pc.distributeProxies(proxies)
-	slog.Debug(fmt.Sprintf("发送任务: %d", len(proxies)))
+	// === Phase 3: 流媒体检测 + 重命名（不淘汰节点，ForceClose 也需执行以保留已有结果） ===
+	if len(speedResults) > 0 {
+		Phase.Store(3)
+		pc.resetPhaseCounters(len(speedResults))
 
-	// 收集结果 - 添加一个 WaitGroup 来等待结果收集完成
-	var collectWg sync.WaitGroup
-	collectWg.Add(1)
-	go func() {
-		pc.collectResults()
-		collectWg.Done()
-	}()
-
-	wg.Wait()
-	close(pc.resultChan)
-
-	// 等待结果收集完成
-	collectWg.Wait()
-	// 等待进度条显示完成
-	time.Sleep(100 * time.Millisecond)
+		mediaConcurrency := effectiveConcurrency(config.GlobalConfig.MediaConcurrent, config.GlobalConfig.Concurrent, len(speedResults))
+		slog.Info(fmt.Sprintf("阶段3-流媒体+重命名: 节点数=%d, 并发数=%d", len(speedResults), mediaConcurrency))
+		resumeProgress()
+		pc.results = pc.runMediaPhase(speedResults, mediaConcurrency)
+		pauseProgress()
+	}
 
 	if config.GlobalConfig.PrintProgress {
 		done <- true
 	}
+
+	Phase.Store(0)
 
 	if config.GlobalConfig.SuccessLimit > 0 && pc.available >= config.GlobalConfig.SuccessLimit {
 		slog.Warn(fmt.Sprintf("达到节点数量限制: %d", config.GlobalConfig.SuccessLimit))
@@ -172,26 +204,160 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	return filteredResults, nil
 }
 
-// worker 处理单个代理检测的工作线程
-func (pc *ProxyChecker) worker(wg *sync.WaitGroup) {
-	defer wg.Done()
-	for proxy := range pc.tasks {
-		if result := pc.checkProxy(proxy); result != nil {
-			pc.resultChan <- *result
-		}
-		pc.incrementProgress()
+// runAlivePhase 执行测活阶段
+// applySuccessLimit: 当没有测速阶段时，SuccessLimit 在此阶段生效
+func (pc *ProxyChecker) runAlivePhase(proxies []map[string]any, concurrency int, applySuccessLimit bool) []aliveResult {
+	var results []aliveResult
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	tasks := make(chan map[string]any, 1)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for proxy := range tasks {
+				if r := pc.checkAlive(proxy); r != nil {
+					mu.Lock()
+					results = append(results, *r)
+					mu.Unlock()
+					pc.incrementAvailable()
+				}
+				pc.incrementProgress()
+			}
+		}()
 	}
+
+	go func() {
+		for _, proxy := range proxies {
+			if applySuccessLimit && config.GlobalConfig.SuccessLimit > 0 && atomic.LoadInt32(&pc.available) >= config.GlobalConfig.SuccessLimit {
+				slog.Warn(fmt.Sprintf("达到存活成功数量限制: %d，停止派发", config.GlobalConfig.SuccessLimit))
+				break
+			}
+			if ForceClose.Load() {
+				slog.Warn("收到强制关闭信号，停止派发任务")
+				break
+			}
+			tasks <- proxy
+		}
+		close(tasks)
+	}()
+
+	wg.Wait()
+	return results
 }
 
-// checkProxy 检测单个代理
-func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
-	res := &Result{
-		Proxy: proxy,
+// runSpeedPhase 执行测速阶段
+// ForceClose 时未测速的节点以 Speed=0 直接加入结果，不丢弃
+// SuccessLimit 时未测速的节点直接丢弃
+func (pc *ProxyChecker) runSpeedPhase(alive []aliveResult, concurrency int) []speedResult {
+	var results []speedResult
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	tasks := make(chan aliveResult, 1)
+	var distributed int32
+	var stoppedByForceClose atomic.Bool
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for a := range tasks {
+				if r := pc.checkSpeed(a); r != nil {
+					mu.Lock()
+					results = append(results, *r)
+					mu.Unlock()
+					pc.incrementAvailable()
+				}
+				pc.incrementProgress()
+			}
+		}()
 	}
 
+	go func() {
+		for i, a := range alive {
+			if config.GlobalConfig.SuccessLimit > 0 && atomic.LoadInt32(&pc.available) >= config.GlobalConfig.SuccessLimit {
+				slog.Warn(fmt.Sprintf("达到测速成功数量限制: %d，停止派发", config.GlobalConfig.SuccessLimit))
+				atomic.StoreInt32(&distributed, int32(i))
+				break
+			}
+			if ForceClose.Load() {
+				slog.Warn("收到强制关闭信号，停止派发测速任务，未测速节点将直接保留")
+				stoppedByForceClose.Store(true)
+				atomic.StoreInt32(&distributed, int32(i))
+				break
+			}
+			tasks <- a
+			atomic.StoreInt32(&distributed, int32(i+1))
+		}
+		close(tasks)
+	}()
+
+	wg.Wait()
+
+	// 仅 ForceClose 时保留未测速节点，SuccessLimit 时不保留
+	if stoppedByForceClose.Load() {
+		skipped := alive[atomic.LoadInt32(&distributed):]
+		for _, a := range skipped {
+			results = append(results, speedResult{Proxy: a.Proxy, Speed: 0})
+		}
+	}
+
+	return results
+}
+
+// runMediaPhase 执行流媒体检测+重命名阶段
+// ForceClose 时未检测的节点直接保留，不丢弃
+func (pc *ProxyChecker) runMediaPhase(speed []speedResult, concurrency int) []Result {
+	var results []Result
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	tasks := make(chan speedResult, 1)
+	var distributed int32
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for sr := range tasks {
+				if r := pc.checkMedia(sr); r != nil {
+					mu.Lock()
+					results = append(results, *r)
+					mu.Unlock()
+				}
+				pc.incrementProgress()
+			}
+		}()
+	}
+
+	go func() {
+		for i, sr := range speed {
+			if ForceClose.Load() {
+				slog.Warn("收到强制关闭信号，停止派发流媒体任务，未检测节点将直接保留")
+				atomic.StoreInt32(&distributed, int32(i))
+				break
+			}
+			tasks <- sr
+			atomic.StoreInt32(&distributed, int32(i+1))
+		}
+		close(tasks)
+	}()
+
+	wg.Wait()
+
+	// 将未派发的节点直接加入结果（无流媒体标签和重命名）
+	skipped := speed[atomic.LoadInt32(&distributed):]
+	for _, sr := range skipped {
+		results = append(results, Result{Proxy: sr.Proxy})
+	}
+
+	return results
+}
+
+// checkAlive 检测单个代理是否存活
+func (pc *ProxyChecker) checkAlive(proxy map[string]any) *aliveResult {
 	if os.Getenv("SUB_CHECK_SKIP") != "" {
-		// slog.Debug(fmt.Sprintf("跳过检测代理: %v", proxy["name"]))
-		return res
+		return &aliveResult{Proxy: proxy}
 	}
 
 	httpClient := CreateClient(proxy)
@@ -201,26 +367,53 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 	}
 	defer httpClient.Close()
 
-	google, err := platform.CheckAlive(httpClient.Client)
-	if err != nil || !google {
+	alive, err := platform.CheckAlive(httpClient.Client)
+	if err != nil || !alive {
 		return nil
 	}
 
-	var speed int
-	if config.GlobalConfig.SpeedTestUrl != "" {
-		speed, _, err = platform.CheckSpeed(httpClient.Client, Bucket, httpClient.BytesRead)
-		if err != nil || speed < config.GlobalConfig.MinSpeed {
-			return nil
-		}
+	return &aliveResult{Proxy: proxy}
+}
+
+// checkSpeed 对存活代理执行测速
+func (pc *ProxyChecker) checkSpeed(a aliveResult) *speedResult {
+	httpClient := CreateClient(a.Proxy)
+	if httpClient == nil {
+		slog.Debug(fmt.Sprintf("创建代理Client失败: %v", a.Proxy["name"]))
+		return nil
+	}
+	defer httpClient.Close()
+
+	speed, _, err := platform.CheckSpeed(httpClient.Client, Bucket, httpClient.BytesRead)
+	if err != nil || speed < config.GlobalConfig.MinSpeed {
+		return nil
 	}
 
-	var mediaClient *http.Client
+	return &speedResult{Proxy: a.Proxy, Speed: speed}
+}
+
+// checkMedia 执行流媒体检测和重命名
+// 此阶段不会丢弃节点，即使创建Client失败或流媒体检测失败，节点仍会保留
+func (pc *ProxyChecker) checkMedia(sr speedResult) *Result {
+	res := &Result{
+		Proxy: sr.Proxy,
+	}
+
+	httpClient := CreateClient(sr.Proxy)
+	if httpClient == nil {
+		slog.Debug(fmt.Sprintf("创建代理Client失败，跳过流媒体检测: %v", sr.Proxy["name"]))
+		// 仍然保留节点，仅跳过流媒体检测和重命名
+		pc.incrementAvailable()
+		return res
+	}
+	defer httpClient.Close()
+
 	if config.GlobalConfig.MediaCheck {
 		mediaTimeout := config.GlobalConfig.MediaCheckTimeout
 		if mediaTimeout <= 0 {
 			mediaTimeout = 10
 		}
-		mediaClient = &http.Client{
+		mediaClient := &http.Client{
 			Transport: httpClient.Client.Transport,
 			Timeout:   time.Duration(mediaTimeout) * time.Second,
 		}
@@ -262,7 +455,6 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 				if err == nil {
 					res.IPRisk = risk
 				} else {
-					// 失败的可能性高，所以放上日志
 					slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
 				}
 			case "tiktok":
@@ -272,8 +464,9 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 			}
 		}
 	}
+
 	// 更新代理名称
-	pc.updateProxyName(res, httpClient, speed)
+	pc.updateProxyName(res, httpClient, sr.Speed)
 	pc.incrementAvailable()
 	return res
 }
@@ -362,12 +555,26 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 
 // showProgress 显示进度条
 func (pc *ProxyChecker) showProgress(done chan bool) {
+	type phaseInfo struct {
+		name        string
+		countLabel  string
+	}
+	phases := map[uint32]phaseInfo{
+		1: {"测活", "存活"},
+		2: {"测速", "通过"},
+		3: {"流媒体", "完成"},
+	}
 	for {
 		select {
 		case <-done:
 			fmt.Println()
 			return
 		default:
+			if progressPaused.Load() {
+				time.Sleep(100 * time.Millisecond)
+				break
+			}
+
 			current := atomic.LoadInt32(&pc.progress)
 			available := atomic.LoadInt32(&pc.available)
 
@@ -376,17 +583,40 @@ func (pc *ProxyChecker) showProgress(done chan bool) {
 				break
 			}
 
+			info, ok := phases[Phase.Load()]
+			if !ok {
+				info = phaseInfo{"检测", "可用"}
+			}
+
 			// if 0/0 = NaN ,shoule panic
 			percent := float64(current) / float64(pc.proxyCount) * 100
-			fmt.Printf("\r进度: [%-45s] %.1f%% (%d/%d) 可用: %d",
+			progressRendered.Store(true)
+			fmt.Printf("\r[%s] 进度: [%-45s] %.1f%% (%d/%d) %s: %d",
+				info.name,
 				strings.Repeat("=", int(percent/2))+">",
 				percent,
 				current,
 				pc.proxyCount,
+				info.countLabel,
 				available)
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+}
+
+// pauseProgress 暂停进度条并换行，确保后续日志不会与进度条混在一行
+func pauseProgress() {
+	progressPaused.Store(true)
+	time.Sleep(150 * time.Millisecond) // 等待进度条goroutine停止输出
+	if progressRendered.Load() {
+		fmt.Println() // 仅在进度条实际输出过时才换行
+	}
+}
+
+// resumeProgress 恢复进度条显示
+func resumeProgress() {
+	progressRendered.Store(false)
+	progressPaused.Store(false)
 }
 
 // 辅助方法
@@ -400,31 +630,14 @@ func (pc *ProxyChecker) incrementAvailable() {
 	Available.Add(1)
 }
 
-// distributeProxies 分发代理任务
-func (pc *ProxyChecker) distributeProxies(proxies []map[string]any) {
-	for _, proxy := range proxies {
-		if config.GlobalConfig.SuccessLimit > 0 && atomic.LoadInt32(&pc.available) >= config.GlobalConfig.SuccessLimit {
-			break
-		}
-		if ForceClose.Load() {
-			slog.Warn("收到强制关闭信号，停止派发任务")
-			break
-		}
-		pc.tasks <- proxy
-	}
-	// // 发送任务结束，进行一次内存回收
-	// for i := range proxies {
-	// 	proxies[i] = nil // 移除 map 引用
-	// }
-	// proxies = nil // 移除切片引用
-	close(pc.tasks)
-}
-
-// collectResults 收集检测结果
-func (pc *ProxyChecker) collectResults() {
-	for result := range pc.resultChan {
-		pc.results = append(pc.results, result)
-	}
+func (pc *ProxyChecker) resetPhaseCounters(count int) {
+	ForceClose.Store(false)
+	pc.proxyCount = count
+	atomic.StoreInt32(&pc.progress, 0)
+	atomic.StoreInt32(&pc.available, 0)
+	Progress.Store(0)
+	Available.Store(0)
+	ProxyCount.Store(uint32(count))
 }
 
 // checkSubscriptionSuccessRate 检查订阅成功率并发出警告
