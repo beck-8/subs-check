@@ -418,51 +418,81 @@ func (pc *ProxyChecker) checkMedia(sr speedResult) *Result {
 			Timeout:   time.Duration(mediaTimeout) * time.Second,
 		}
 
-		// 遍历需要检测的平台
+		// 并行检测所有平台
+		var mediaWg sync.WaitGroup
 		for _, plat := range config.GlobalConfig.Platforms {
 			switch plat {
 			case "openai":
-				cookiesOK, clientOK := platform.CheckOpenAI(mediaClient)
-				if clientOK && cookiesOK {
-					res.Openai = true
-				} else if cookiesOK || clientOK {
-					res.OpenaiWeb = true
-				}
+				mediaWg.Add(1)
+				go func() {
+					defer mediaWg.Done()
+					cookiesOK, clientOK := platform.CheckOpenAI(mediaClient)
+					if clientOK && cookiesOK {
+						res.Openai = true
+					} else if cookiesOK || clientOK {
+						res.OpenaiWeb = true
+					}
+				}()
 			case "youtube":
-				if region, _ := platform.CheckYoutube(mediaClient); region != "" {
-					res.Youtube = region
-				}
+				mediaWg.Add(1)
+				go func() {
+					defer mediaWg.Done()
+					if region, _ := platform.CheckYoutube(mediaClient); region != "" {
+						res.Youtube = region
+					}
+				}()
 			case "netflix":
-				if ok, _ := platform.CheckNetflix(mediaClient); ok {
-					res.Netflix = true
-				}
+				mediaWg.Add(1)
+				go func() {
+					defer mediaWg.Done()
+					if ok, _ := platform.CheckNetflix(mediaClient); ok {
+						res.Netflix = true
+					}
+				}()
 			case "disney":
-				if ok, _ := platform.CheckDisney(mediaClient); ok {
-					res.Disney = true
-				}
+				mediaWg.Add(1)
+				go func() {
+					defer mediaWg.Done()
+					if ok, _ := platform.CheckDisney(mediaClient); ok {
+						res.Disney = true
+					}
+				}()
 			case "gemini":
-				if region, _ := platform.CheckGemini(mediaClient); region != "" {
-					res.Gemini = region
-				}
+				mediaWg.Add(1)
+				go func() {
+					defer mediaWg.Done()
+					if region, _ := platform.CheckGemini(mediaClient); region != "" {
+						res.Gemini = region
+					}
+				}()
 			case "iprisk":
-				country, ip := proxyutils.GetProxyCountry(mediaClient)
-				if ip == "" {
-					break
-				}
-				res.IP = ip
-				res.Country = country
-				risk, err := platform.CheckIPRisk(mediaClient, ip)
-				if err == nil {
-					res.IPRisk = risk
-				} else {
-					slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
-				}
+				mediaWg.Add(1)
+				go func() {
+					defer mediaWg.Done()
+					country, ip := proxyutils.GetProxyCountry(mediaClient)
+					if ip == "" {
+						return
+					}
+					res.IP = ip
+					res.Country = country
+					risk, err := platform.CheckIPRisk(mediaClient, ip)
+					if err == nil {
+						res.IPRisk = risk
+					} else {
+						slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
+					}
+				}()
 			case "tiktok":
-				if region, _ := platform.CheckTikTok(mediaClient); region != "" {
-					res.TikTok = region
-				}
+				mediaWg.Add(1)
+				go func() {
+					defer mediaWg.Done()
+					if region, _ := platform.CheckTikTok(mediaClient); region != "" {
+						res.TikTok = region
+					}
+				}()
 			}
 		}
+		mediaWg.Wait()
 	}
 
 	// 更新代理名称

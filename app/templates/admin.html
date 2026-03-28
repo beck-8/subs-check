@@ -8,43 +8,80 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/editor/editor.main.css" rel="stylesheet">
     <style>
-        body { padding: 15px; }
-        
-        /* 编辑器样式 - 使用动态高度计算 */
-        #editor { 
-            height: calc(100vh - 335px); /* 调整高度使其等于日志容器+进度条区域的总高度 */
+        :root {
+            --bg-primary: #f0f2f5;
+            --bg-card: #ffffff;
+            --border-color: #e8ecf1;
+            --text-primary: #1a1a2e;
+            --text-secondary: #6c757d;
+            --accent-blue: #4361ee;
+            --accent-green: #2ec4b6;
+            --accent-red: #e63946;
+            --accent-yellow: #f4a261;
+            --accent-cyan: #4cc9f0;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+            --radius: 10px;
+        }
+
+        body {
+            padding: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        /* 主内容行等高 */
+        .main-row { display: flex; flex-wrap: wrap; }
+        .main-row > [class*="col-"] { display: flex; }
+        .main-row .card { display: flex; flex-direction: column; width: 100%; }
+        .main-row .card > .card-body { flex: 1 1 auto; overflow: hidden; }
+
+        /* 编辑器样式 - 填满卡片剩余空间 */
+        #editor {
+            height: 100%;
             min-height: 300px;
-            border: 1px solid #ddd;
+            border: none;
             margin-bottom: 0;
         }
-        
-        /* 日志容器样式 - 使用动态高度计算 */
+
+        .editor-wrapper { position: relative; height: 100%; }
+
+        /* 日志容器样式 - 填满卡片剩余空间 */
         .logs-container {
-            height: calc(100vh - 400px);
-            min-height: 300px;
+            height: 100%;
+            min-height: 250px;
             overflow-y: auto;
-            background-color: #f8f9fa;
-            padding: 10px;
-            font-family: monospace;
+            background-color: #1e1e2e;
+            padding: 14px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
             font-size: 12px;
             white-space: pre-wrap;
-            border: 1px solid #ddd;
+            border: none;
             margin-bottom: 0;
+            color: #cdd6f4;
+            border-radius: 0;
         }
-        
+
+        /* 大屏时给左侧日志区一个合理的高度，右侧编辑器通过flex自动对齐 */
+        @media (min-width: 992px) {
+            .logs-container { height: calc(100vh - 440px); }
+        }
+
         /* 响应式调整 */
         @media (max-width: 991px) {
-            body { padding: 10px; }
-            #editor { height: calc(100vh - 285px); } /* 调整编辑器高度 */
-            .logs-container { height: calc(100vh - 350px); }
+            body { padding: 12px; }
+            .main-row { display: block; }
+            #editor { height: calc(100vh - 285px); }
+            .logs-container { height: calc(100vh - 390px); }
             .card-header { padding: 0.5rem 0.75rem; }
             .card-body { padding: 0.75rem; }
             .card { margin-bottom: 15px; }
         }
-        
+
         @media (max-width: 768px) {
             body { padding: 8px; }
-            #editor { height: 420px; } /* 调整编辑器高度 */
+            #editor { height: 420px; }
             .logs-container { height: 350px; }
             .status-item { margin-bottom: 8px; }
             .config-path {
@@ -55,202 +92,298 @@
             }
             .card { margin-bottom: 12px; }
             .progress-section { padding: 10px; }
+            .phase-steps { flex-wrap: wrap; gap: 6px; }
         }
-        
-        /* 大屏幕优化 */
+
         @media (min-width: 1600px) {
-            #editor { height: calc(100vh - 385px); } /* 调整编辑器高度 */
-            .logs-container { height: calc(100vh - 450px); }
+            .logs-container { height: calc(100vh - 490px); }
         }
-        
-        .card { margin-bottom: 15px; }
-        
-        /* 日志颜色样式 */
-        .log-info { color: #28a745; }    /* 绿色 */
-        .log-error { color: #dc3545; }   /* 红色 */
-        .log-warn { color: #ffc107; }    /* 黄色 */
-        .log-debug { color: #17a2b8; }   /* 青色 */
-        .log-time { color: #6c757d; }    /* 灰色 */
-        
+
+        /* 卡片样式 */
+        .card {
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .card-header {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        /* 日志颜色样式 - 暗色主题 */
+        .log-info { color: #a6e3a1; }
+        .log-error { color: #f38ba8; }
+        .log-warn { color: #f9e2af; }
+        .log-debug { color: #89b4fa; }
+        .log-time { color: #7f849c; }
+
+        /* 状态栏 */
         .status-bar {
-            background-color: #f8f9fa;
-            padding: 10px;
-            margin-bottom: 15px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
+            background-color: var(--bg-card);
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
         }
-        
+
         .config-path {
             white-space: normal;
             word-break: break-all;
+            color: var(--text-secondary);
+            font-size: 0.85em;
         }
-        
-        .api-key-form {
-            margin-bottom: 15px;
-        }
-        
+
+        .api-key-form { margin-bottom: 16px; }
+
+        /* 按钮样式 */
         .btn {
-            padding: 5px 10px;
-            font-size: 0.875rem;
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
         }
-        
+
+        .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+        .btn:active { transform: translateY(0); }
+
         .btn-sm {
-            padding: 3px 7px;
-            font-size: 0.75rem;
+            padding: 4px 10px;
+            font-size: 0.78rem;
         }
-        
+
+        .btn-primary {
+            background-color: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-danger {
+            background-color: var(--accent-red);
+            border-color: var(--accent-red);
+        }
+
+        .btn-success {
+            background-color: var(--accent-green);
+            border-color: var(--accent-green);
+        }
+
+        /* 提示框 */
         .alert {
             padding: 0.75rem 1rem;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
             border: none;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
         }
-        
+
         .alert-info {
-            background-color: #e8f4fd;
-            color: #0c5460;
+            background-color: #eef2ff;
+            color: #3730a3;
         }
-        
+
         .alert-info a {
-            color: #0c5460;
+            color: #3730a3;
             text-decoration: underline;
+            font-weight: 500;
         }
-        
+
         .form-control {
-            border-radius: 4px;
-            border: 1px solid #ddd;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-        
+
         .form-control:focus {
-            border-color: #80bdff;
-            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
         }
-        
+
         h1 {
-            color: #333;
-            font-size: 1.75rem;
-            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 1.6rem;
+            font-weight: 700;
             margin-bottom: 0.5rem;
         }
-        
+
         /* 旋转动画 */
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
+
         .rotate-animation {
             animation: spin 1s linear infinite;
             display: inline-block;
         }
-        
+
         /* 配置编辑器蒙版 */
         .editor-overlay {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(235, 235, 235, 0.85);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(240, 242, 245, 0.92);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 10;
             display: flex;
             justify-content: center;
             align-items: center;
             cursor: pointer;
         }
-        
+
         .editor-overlay-message {
-            background-color: rgba(255, 255, 255, 0.5);
-            color: #333;
-            padding: 15px 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            background-color: var(--bg-card);
+            color: var(--text-secondary);
+            padding: 16px 24px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-md);
             text-align: center;
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
         }
-        
-        .editor-wrapper {
-            position: relative;
+
+        /* 阶段步骤指示器 */
+        .phase-steps {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
         }
-        
+
+        .phase-step {
+            flex: 1;
+            text-align: center;
+            padding: 6px 8px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            background-color: #f0f2f5;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .phase-step.active {
+            background-color: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+            box-shadow: 0 2px 8px rgba(67, 97, 238, 0.3);
+        }
+
+        .phase-step.done {
+            background-color: #d1fae5;
+            color: #065f46;
+            border-color: #a7f3d0;
+        }
+
+        .phase-step .phase-icon {
+            margin-right: 4px;
+        }
+
+        .phase-step .phase-count {
+            display: block;
+            font-size: 0.7rem;
+            font-weight: 400;
+            opacity: 0.85;
+            margin-top: 2px;
+        }
+
         /* 进度条样式 */
         .progress-section {
-            padding: 12px;
-            background-color: #f8f9fa;
-            border-top: 1px solid #ddd;
+            padding: 14px;
+            background-color: var(--bg-card);
+            border-top: 1px solid var(--border-color);
         }
-        
+
         .progress-info {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 5px;
-            font-size: 14px;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
         }
-        
+
         .progress {
-            height: 15px;
+            height: 12px;
             position: relative;
+            background-color: #e9ecef;
+            border-radius: 6px;
+            overflow: hidden;
         }
-        
+
         .progress-bar {
             transition: width 0.5s ease;
+            border-radius: 6px;
         }
-        
+
         .progress-bar-success {
-            background-color: #28a745; /* 成功的进度条使用绿色 */
+            background: linear-gradient(90deg, #2ec4b6, #28a745);
             position: absolute;
             height: 100%;
-            left: 0;
-            top: 0;
+            left: 0; top: 0;
             z-index: 10;
-            box-shadow: 0 0 8px #28a745; /* 添加发光效果 */
-            border-radius: 0 4px 4px 0; /* 右侧圆角 */
+            box-shadow: 0 0 10px rgba(46, 196, 182, 0.4);
         }
-        
+
         .progress-bar-total {
-            background-color: rgba(23, 162, 184, 0.5); /* 总进度条使用半透明青色 */
+            background-color: rgba(67, 97, 238, 0.25);
             position: absolute;
             height: 100%;
-            left: 0;
-            top: 0;
+            left: 0; top: 0;
             z-index: 5;
         }
-        
+
         /* 闪烁效果 */
         @keyframes pulse {
-            0% { opacity: 0.6; }
+            0% { opacity: 0.7; }
             50% { opacity: 1; }
-            100% { opacity: 0.6; }
+            100% { opacity: 0.7; }
         }
-        
+
         .success-highlight {
             animation: pulse 1.5s infinite;
             font-weight: bold;
-            color: #28a745;
-            padding: 0 2px;
-            border-radius: 3px;
-            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--accent-green);
+            padding: 1px 4px;
+            border-radius: 4px;
+            background-color: rgba(46, 196, 182, 0.1);
         }
+
+        /* 版本标签 */
+        .version-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 20px;
+            background-color: #eef2ff;
+            color: var(--accent-blue);
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+
+        /* 日志容器滚动条 */
+        .logs-container::-webkit-scrollbar { width: 6px; }
+        .logs-container::-webkit-scrollbar-track { background: transparent; }
+        .logs-container::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
+        .logs-container::-webkit-scrollbar-thumb:hover { background: #585b70; }
     </style>
 </head>
 <body>
     <div class="container-fluid">
         <div class="row align-items-center mb-3">
             <div class="col-md-8 col-sm-12">
-                <h1 class="mb-0">Subs Check 配置管理</h1>
+                <h1 class="mb-0"><i class="bi bi-speedometer2 me-2"></i>Subs Check 配置管理</h1>
             </div>
             <div class="col-md-4 col-sm-12 text-md-end">
-                <small class="text-muted" id="versionInfo">版本: 加载中...</small>
+                <span class="version-badge" id="versionInfo">版本: 加载中...</span>
             </div>
         </div>
-        
+
         <!-- 项目信息 -->
         <div class="alert alert-info mb-3 d-flex justify-content-between align-items-center">
             <div>
-                <i class="bi bi-github me-2"></i>项目地址: 
+                <i class="bi bi-github me-2"></i>项目地址:
                 <a href="https://github.com/beck-8/subs-check" target="_blank" class="text-break">https://github.com/beck-8/subs-check</a>
             </div>
             <div class="d-none d-md-block">
@@ -263,7 +396,7 @@
             <div class="card-body py-2">
                 <div class="row align-items-center">
                     <div class="col-md-3 col-sm-12 mb-sm-2">
-                        <label for="apiKey" class="form-label mb-0"><strong>API密钥:</strong></label>
+                        <label for="apiKey" class="form-label mb-0"><strong><i class="bi bi-key me-1"></i>API密钥:</strong></label>
                     </div>
                     <div class="col-md-7 col-sm-8">
                         <div class="input-group">
@@ -279,16 +412,16 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- 状态栏 -->
         <div class="status-bar">
-            <div class="row">
+            <div class="row align-items-center">
                 <div class="col-md-5 col-sm-12 status-item">
-                    <strong>配置文件:</strong> 
+                    <strong><i class="bi bi-file-earmark-code me-1"></i>配置文件:</strong>
                     <span class="config-path" title="{{.configPath}}">{{.configPath}}</span>
                 </div>
                 <div class="col-md-3 col-sm-6 status-item">
-                    <strong>当前状态:</strong> 
+                    <strong><i class="bi bi-activity me-1"></i>状态:</strong>
                     <span id="statusContainer">
                         <span id="statusIcon" class="bi me-1"></span>
                         <span id="nextCheckTime">加载中...</span>
@@ -296,7 +429,7 @@
                 </div>
                 <div class="col-md-4 col-sm-6 status-item text-md-end">
                     <button id="forceClose" class="btn btn-danger btn-sm me-2">
-                        <i class="bi bi-power me-1"></i>强制关闭
+                        <i class="bi bi-stop-circle me-1"></i>强制停止
                     </button>
                     <button id="triggerCheck" class="btn btn-primary btn-sm">
                         <i class="bi bi-play-fill me-1"></i>立即检测
@@ -304,15 +437,15 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- 主要内容区域 -->
-        <div class="row">
+        <div class="row main-row">
             <!-- 左侧日志区域 -->
             <div class="col-lg-5 col-md-12">
                 <div class="card">
                     <div class="card-header">
                         <div class="d-flex justify-content-between align-items-center">
-                            <span>最近日志</span>
+                            <span><i class="bi bi-terminal me-1"></i>最近日志</span>
                             <button id="refreshLogs" class="btn btn-secondary btn-sm">
                                 <i class="bi bi-arrow-repeat me-1"></i>刷新
                             </button>
@@ -323,12 +456,27 @@
                     </div>
                     <!-- 进度条区域 -->
                     <div id="progressSection" class="progress-section">
-                        <div class="progress-info" style="display: none;">
+                        <!-- 阶段步骤指示器 -->
+                        <div id="phaseSteps" class="phase-steps" style="display: none;">
+                            <div id="phaseStep1" class="phase-step" data-phase="1">
+                                <span class="phase-icon"><i class="bi bi-heart-pulse"></i></span>测活
+                                <span class="phase-count" id="phaseCount1"></span>
+                            </div>
+                            <div id="phaseStep2" class="phase-step" data-phase="2">
+                                <span class="phase-icon"><i class="bi bi-speedometer"></i></span>测速
+                                <span class="phase-count" id="phaseCount2"></span>
+                            </div>
+                            <div id="phaseStep3" class="phase-step" data-phase="3">
+                                <span class="phase-icon"><i class="bi bi-film"></i></span>流媒体
+                                <span class="phase-count" id="phaseCount3"></span>
+                            </div>
+                        </div>
+                        <div class="progress-info">
                             <div>处理进度: <span id="progressText">N/A</span></div>
                             <div><span id="progressPercent">N/A</span></div>
                         </div>
                         <div class="progress-info">
-                            <div>成功节点: <span id="successText">N/A</span></div>
+                            <div id="successLabel">成功节点: <span id="successText">N/A</span></div>
                             <div><span id="processPercent">N/A</span></div>
                         </div>
                         <div class="progress">
@@ -338,13 +486,13 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- 右侧配置编辑器 -->
             <div class="col-lg-7 col-md-12">
                 <div class="card">
                     <div class="card-header">
                         <div class="d-flex justify-content-between align-items-center">
-                            <span>配置编辑器</span>
+                            <span><i class="bi bi-gear me-1"></i>配置编辑器</span>
                             <div>
                                 <button id="toggleConfig" class="btn btn-outline-secondary btn-sm me-2" title="显示/隐藏配置">
                                     <i class="bi bi-eye-slash"></i>
@@ -372,28 +520,37 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <!-- Monaco Editor -->
     <script>var require = { paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs' } };</script>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/loader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/editor/editor.main.nls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/editor/editor.main.js"></script>
-    
+
     <script>
         let editor;
-        
+        // 阶段记录：保存每个阶段的最终结果
+        let phaseResults = { 1: null, 2: null, 3: null };
+        let lastPhase = 0;
+
+        const PHASE_LABELS = {
+            1: { name: '测活', countLabel: '存活' },
+            2: { name: '测速', countLabel: '通过' },
+            3: { name: '流媒体', countLabel: '完成' }
+        };
+
         // 初始化API密钥
         const storedApiKey = localStorage.getItem('apiKey') || '';
         document.getElementById('apiKey').value = storedApiKey;
-        
+
         // 切换API密钥可见性
         document.getElementById('toggleApiKey').addEventListener('click', function() {
             const apiKeyInput = document.getElementById('apiKey');
             const icon = this.querySelector('i');
-            
+
             if (apiKeyInput.type === 'password') {
                 apiKeyInput.type = 'text';
                 icon.className = 'bi bi-eye';
@@ -402,18 +559,17 @@
                 icon.className = 'bi bi-eye-slash';
             }
         });
-        
+
         // 保存API密钥到本地存储
         document.getElementById('saveApiKey').addEventListener('click', function() {
             const apiKey = document.getElementById('apiKey').value.trim();
             localStorage.setItem('apiKey', apiKey);
-            
-            // 验证API密钥
+
             const button = this;
             const originalText = button.textContent;
             button.disabled = true;
             button.textContent = '验证中...';
-            
+
             fetch('/api/status', {
                 headers: { 'X-API-Key': apiKey }
             })
@@ -423,7 +579,6 @@
                     return false;
                 } else if (response.ok) {
                     alert('API密钥有效，已保存到本地');
-                    // 重新加载数据
                     loadConfig();
                     loadLogs();
                     updateStatus();
@@ -441,24 +596,20 @@
                 button.textContent = originalText;
             });
         });
-        
+
         // 获取API密钥
         function getApiKey() {
             return localStorage.getItem('apiKey') || '';
         }
-        
+
         // 添加API密钥到请求头
         function addApiKeyHeader(headers = {}) {
             const apiKey = getApiKey();
-            return {
-                ...headers,
-                'X-API-Key': apiKey
-            };
+            return { ...headers, 'X-API-Key': apiKey };
         }
-        
+
         // 初始化编辑器
         require(['vs/editor/editor.main'], function() {
-            // 注册YAML语言
             monaco.languages.register({ id: 'yaml' });
             monaco.languages.setMonarchTokensProvider('yaml', {
                 tokenizer: {
@@ -471,43 +622,40 @@
                     ]
                 }
             });
-            
-            // 创建编辑器
+
             editor = monaco.editor.create(document.getElementById('editor'), {
                 language: 'yaml',
                 theme: 'vs',
                 automaticLayout: true,
-                minimap: { enabled: false }
+                minimap: { enabled: false },
+                fontSize: 13,
+                lineHeight: 20,
+                padding: { top: 10 },
+                scrollBeyondLastLine: false,
+                renderLineHighlight: 'gutter',
             });
-            
-            // 加载配置
+
             loadConfig();
-            
-            // 设置编辑器遮罩层
+
             const toggleConfigBtn = document.getElementById('toggleConfig');
             const editorOverlay = document.getElementById('editorOverlay');
-            
-            // 默认隐藏配置
+
             editorOverlay.style.display = 'flex';
-            
-            // 点击按钮切换显示/隐藏
+
             toggleConfigBtn.addEventListener('click', function() {
                 const isHidden = editorOverlay.style.display === 'flex';
                 editorOverlay.style.display = isHidden ? 'none' : 'flex';
-                
-                // 更新按钮图标
                 const icon = toggleConfigBtn.querySelector('i');
                 icon.className = isHidden ? 'bi bi-eye' : 'bi bi-eye-slash';
             });
-            
-            // 点击遮罩层也可以切换显示
+
             editorOverlay.addEventListener('click', function() {
                 editorOverlay.style.display = 'none';
                 const icon = toggleConfigBtn.querySelector('i');
                 icon.className = 'bi bi-eye';
             });
         });
-        
+
         // 处理未授权响应
         function handleUnauthorized(response, showAlert = true) {
             if (response.status === 401) {
@@ -518,47 +666,37 @@
             }
             return false;
         }
-        
+
         // 加载配置
         function loadConfig() {
             return fetch('/api/config', {
                 headers: addApiKeyHeader()
             })
             .then(response => {
-                if (handleUnauthorized(response, false)) {
-                    return;
-                }
-                if (!response.ok) {
-                    throw new Error('加载配置失败');
-                }
+                if (handleUnauthorized(response, false)) return;
+                if (!response.ok) throw new Error('加载配置失败');
                 return response.json();
             })
             .then(data => {
-                if (editor && data) {
-                    editor.setValue(data.content);
-                }
+                if (editor && data) editor.setValue(data.content);
                 return data;
             })
             .catch(error => {
                 console.error('加载配置失败:', error);
             });
         }
-        
+
         // 保存配置
         document.getElementById('saveConfig').addEventListener('click', function() {
             const content = editor.getValue();
-            
+
             fetch('/api/config', {
                 method: 'POST',
-                headers: addApiKeyHeader({
-                    'Content-Type': 'application/json'
-                }),
+                headers: addApiKeyHeader({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ content })
             })
             .then(response => {
-                if (handleUnauthorized(response, true)) {
-                    throw new Error('未授权');
-                }
+                if (handleUnauthorized(response, true)) throw new Error('未授权');
                 return response.json();
             })
             .then(data => {
@@ -570,120 +708,82 @@
                 }
             })
             .catch(error => {
-                if (error.message !== '未授权') {
-                    alert('保存失败: ' + error.message);
-                }
+                if (error.message !== '未授权') alert('保存失败: ' + error.message);
             });
         });
-        
+
         // 重新加载配置
         document.getElementById('reloadConfig').addEventListener('click', function() {
             const button = this;
             const icon = button.querySelector('i');
-            
-            // 添加旋转动画
             icon.classList.add('rotate-animation');
             button.disabled = true;
-            
-            // 加载配置
-            loadConfig()
-                .finally(() => {
-                    // 延迟移除动画，以便用户能看到
-                    setTimeout(() => {
-                        icon.classList.remove('rotate-animation');
-                        button.disabled = false;
-                    }, 500);
-                });
+            loadConfig().finally(() => {
+                setTimeout(() => { icon.classList.remove('rotate-animation'); button.disabled = false; }, 500);
+            });
         });
-        
+
         // 强制关闭
         document.getElementById('forceClose').addEventListener('click', function() {
-            if (!confirm('确定要强制关闭程序吗？这将立即终止所有正在进行的任务。')) {
-                return;
-            }
-            
+            if (!confirm('确定要强制停止当前阶段吗？已有结果将被保留。')) return;
+
             const button = this;
             const icon = button.querySelector('i');
             const originalIcon = icon.className;
-            
-            // 替换图标并添加旋转动画
             icon.className = 'bi bi-arrow-repeat me-1 rotate-animation';
             button.disabled = true;
-            
+
             fetch('/api/force-close', {
                 method: 'POST',
                 headers: addApiKeyHeader()
             })
             .then(response => {
-                if (handleUnauthorized(response, true)) {
-                    throw new Error('未授权');
-                }
+                if (handleUnauthorized(response, true)) throw new Error('未授权');
                 return response.json();
-            })
-            .then(data => {
-                // 什么都不做，只是发送请求
             })
             .catch(error => {
                 if (error.message !== '未授权') {
-                    console.error('强制关闭失败:', error);
-                    alert('强制关闭失败: ' + error.message);
+                    console.error('强制停止失败:', error);
+                    alert('强制停止失败: ' + error.message);
                 }
             })
             .finally(() => {
-                // 还原按钮
-                setTimeout(() => {
-                    icon.className = originalIcon;
-                    button.disabled = false;
-                }, 500);
+                setTimeout(() => { icon.className = originalIcon; button.disabled = false; }, 500);
             });
         });
-        
+
         // 立即检测
         document.getElementById('triggerCheck').addEventListener('click', function() {
             const button = this;
             const icon = button.querySelector('i');
             const originalIcon = icon.className;
-            
-            // 替换图标并添加旋转动画
             icon.className = 'bi bi-arrow-repeat me-1 rotate-animation';
             button.disabled = true;
-            
+
             fetch('/api/trigger-check', {
                 method: 'POST',
                 headers: addApiKeyHeader()
             })
             .then(response => {
-                if (handleUnauthorized(response, true)) {
-                    throw new Error('未授权');
-                }
+                if (handleUnauthorized(response, true)) throw new Error('未授权');
                 return response.json();
             })
-            .then(data => {
-                loadLogs();
-            })
+            .then(data => { loadLogs(); })
             .catch(error => {
-                if (error.message !== '未授权') {
-                    console.error('触发检测失败:', error);
-                }
+                if (error.message !== '未授权') console.error('触发检测失败:', error);
             })
             .finally(() => {
-                // 还原按钮
-                setTimeout(() => {
-                    icon.className = originalIcon;
-                    button.disabled = false;
-                }, 500);
+                setTimeout(() => { icon.className = originalIcon; button.disabled = false; }, 500);
             });
         });
-        
+
         // 加载日志
         function loadLogs() {
             return fetch('/api/logs', {
                 headers: addApiKeyHeader()
             })
             .then(response => {
-                if (handleUnauthorized(response, false)) {
-                    throw new Error('未授权');
-                }
+                if (handleUnauthorized(response, false)) throw new Error('未授权');
                 return response.json();
             })
             .then(data => {
@@ -691,17 +791,13 @@
                 if (data.error) {
                     logsContainer.textContent = '加载日志失败: ' + data.error;
                 } else {
-                    // 记录当前滚动位置
                     const isScrolledToBottom = logsContainer.scrollHeight - logsContainer.clientHeight <= logsContainer.scrollTop + 1;
-                    
                     logsContainer.innerHTML = '';
                     data.logs.forEach(log => {
                         const logLine = document.createElement('div');
                         logLine.innerHTML = colorizeLog(log);
                         logsContainer.appendChild(logLine);
                     });
-                    
-                    // 只有当用户在底部时才自动滚动
                     if (isScrolledToBottom) {
                         logsContainer.scrollTop = logsContainer.scrollHeight;
                     }
@@ -714,97 +810,115 @@
                 }
             });
         }
-        
+
         // 为日志添加颜色
         function colorizeLog(log) {
-            // 匹配时间部分
             log = log.replace(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/, '<span class="log-time">$1</span>');
-            
-            // 匹配日志级别并添加颜色
             log = log.replace(/\bINF\b/, '<span class="log-info">INF</span>');
             log = log.replace(/\bERR\b/, '<span class="log-error">ERR</span>');
             log = log.replace(/\bWRN\b/, '<span class="log-warn">WRN</span>');
             log = log.replace(/\bDBG\b/, '<span class="log-debug">DBG</span>');
-            
             return log;
         }
-        
+
         // 刷新日志
         document.getElementById('refreshLogs').addEventListener('click', function() {
             const button = this;
             const icon = button.querySelector('i');
-            
-            // 添加旋转动画
             icon.classList.add('rotate-animation');
             button.disabled = true;
-            
-            // 加载日志
-            loadLogs()
-                .finally(() => {
-                    // 延迟移除动画，以便用户能看到
-                    setTimeout(() => {
-                        icon.classList.remove('rotate-animation');
-                        button.disabled = false;
-                    }, 500);
-                });
+            loadLogs().finally(() => {
+                setTimeout(() => { icon.classList.remove('rotate-animation'); button.disabled = false; }, 500);
+            });
         });
-        
-        // 更新进度条
-        function updateProgressBar(total, processed, available) {
-            // 计算检测进度百分比，保留一位小数
-            const percentTotal = total > 0 ? (processed / total * 100).toFixed(1) : 0;
-            
-            // 更新总进度文本
-            const progressText = document.getElementById('progressText');
-            progressText.textContent = `${processed}/${total}`;
-            
-            // 更新总进度百分比文本
-            const progressPercent = document.getElementById('progressPercent');
-            progressPercent.textContent = `${percentTotal}%`;
-            
-            // 同时更新显示的处理进度百分比
-            const processPercent = document.getElementById('processPercent');
-            processPercent.textContent = `${percentTotal}%`;
-            
-            // 更新总进度条
-            const progressBarTotal = document.getElementById('progressBarTotal');
-            progressBarTotal.style.width = `${percentTotal}%`;
-            progressBarTotal.setAttribute('aria-valuenow', percentTotal);
-            
-            // 计算成功率百分比，保留一位小数
-            const percentSuccess = total > 0 ? (available / total * 100).toFixed(1) : 0;
-            
-            // 更新成功文本
-            const successText = document.getElementById('successText');
-            
-            // 根据成功率决定是否添加高亮样式
-            if (available > 0) { 
-                // 任何时候有成功节点，都添加高亮效果
-                successText.innerHTML = `<span class="success-highlight">${available}</span>/${total}`;
-                
-                // 更新成功进度条
-                const progressBarSuccess = document.getElementById('progressBarSuccess');
-                progressBarSuccess.style.width = `${percentSuccess}%`;
-                progressBarSuccess.setAttribute('aria-valuenow', percentSuccess);
-            } else {
-                successText.textContent = `${available}/${total}`;
-                
-                // 更新成功进度条
-                const progressBarSuccess = document.getElementById('progressBarSuccess');
-                progressBarSuccess.style.width = `${percentSuccess}%`;
-                progressBarSuccess.setAttribute('aria-valuenow', percentSuccess);
+
+        // 更新阶段步骤指示器
+        function updatePhaseSteps(phase, available, total) {
+            const stepsContainer = document.getElementById('phaseSteps');
+
+            if (phase === 0) {
+                stepsContainer.style.display = 'none';
+                return;
+            }
+
+            stepsContainer.style.display = 'flex';
+
+            // 当阶段切换时，保存上一阶段的结果
+            if (phase !== lastPhase && lastPhase > 0 && lastPhase < phase) {
+                // 上一阶段结束，记录结果
+                const prevCount = document.getElementById('phaseCount' + lastPhase);
+                if (prevCount && prevCount.textContent) {
+                    phaseResults[lastPhase] = prevCount.textContent;
+                }
+            }
+            lastPhase = phase;
+
+            for (let i = 1; i <= 3; i++) {
+                const step = document.getElementById('phaseStep' + i);
+                const count = document.getElementById('phaseCount' + i);
+
+                step.classList.remove('active', 'done');
+
+                if (i < phase) {
+                    step.classList.add('done');
+                    if (phaseResults[i]) {
+                        count.textContent = phaseResults[i];
+                    }
+                } else if (i === phase) {
+                    step.classList.add('active');
+                    const label = PHASE_LABELS[phase] ? PHASE_LABELS[phase].countLabel : '';
+                    count.textContent = label + ': ' + available + '/' + total;
+                } else {
+                    count.textContent = '';
+                }
             }
         }
-        
+
+        // 更新进度条
+        function updateProgressBar(total, processed, available, phase) {
+            const percentTotal = total > 0 ? (processed / total * 100).toFixed(1) : 0;
+
+            const progressText = document.getElementById('progressText');
+            progressText.textContent = processed + '/' + total;
+
+            const progressPercent = document.getElementById('progressPercent');
+            progressPercent.textContent = percentTotal + '%';
+
+            const progressBarTotal = document.getElementById('progressBarTotal');
+            progressBarTotal.style.width = percentTotal + '%';
+
+            const percentSuccess = total > 0 ? (available / total * 100).toFixed(1) : 0;
+
+            const processPercent = document.getElementById('processPercent');
+            processPercent.textContent = percentSuccess + '%';
+
+            // 显示阶段对应的标签
+            const label = (phase && PHASE_LABELS[phase]) ? PHASE_LABELS[phase].countLabel : '成功节点';
+            const successLabel = document.getElementById('successLabel');
+            const successTextEl = document.getElementById('successText');
+            if (successLabel && successTextEl) {
+                successLabel.childNodes[0].textContent = label + ': ';
+                if (available > 0) {
+                    successTextEl.innerHTML = '<span class="success-highlight">' + available + '</span>/' + total;
+                } else {
+                    successTextEl.textContent = available + '/' + total;
+                }
+            }
+
+            const progressBarSuccess = document.getElementById('progressBarSuccess');
+            progressBarSuccess.style.width = percentSuccess + '%';
+
+            // 更新阶段指示器
+            updatePhaseSteps(phase, available, total);
+        }
+
         // 更新状态
         function updateStatus() {
             fetch('/api/status', {
                 headers: addApiKeyHeader()
             })
             .then(response => {
-                if (handleUnauthorized(response, false)) {
-                    return;
-                }
+                if (handleUnauthorized(response, false)) return;
                 return response.json();
             })
             .then(data => {
@@ -812,27 +926,35 @@
                     const statusContainer = document.getElementById('statusContainer');
                     const statusIcon = document.getElementById('statusIcon');
                     const statusText = document.getElementById('nextCheckTime');
-                    
-                    // 更新状态
+
                     if (data.checking) {
                         statusContainer.className = 'text-primary';
                         statusIcon.className = 'bi bi-arrow-repeat me-1 rotate-animation';
-                        statusText.textContent = '正在检测中...';
-                        
-                        // 更新进度条 - 直接传递available参数
-                        updateProgressBar(data.proxyCount, data.progress, data.available);
+                        const phaseName = (data.phase && PHASE_LABELS[data.phase]) ? PHASE_LABELS[data.phase].name : '检测';
+                        statusText.textContent = '正在' + phaseName + '中...';
+
+                        updateProgressBar(data.proxyCount, data.progress, data.available, data.phase);
                     } else {
                         statusContainer.className = 'text-success';
                         statusIcon.className = 'bi bi-check-circle me-1';
                         statusText.textContent = '空闲';
-                        
-                        // 显示N/A
+
+                        // 重置阶段状态
+                        phaseResults = { 1: null, 2: null, 3: null };
+                        lastPhase = 0;
+                        updatePhaseSteps(0, 0, 0);
+
                         document.getElementById('progressText').textContent = 'N/A';
                         document.getElementById('progressPercent').textContent = 'N/A';
                         document.getElementById('processPercent').textContent = 'N/A';
-                        document.getElementById('successText').textContent = 'N/A';
                         document.getElementById('progressBarTotal').style.width = '0%';
                         document.getElementById('progressBarSuccess').style.width = '0%';
+
+                        const successLabel = document.getElementById('successLabel');
+                        if (successLabel) {
+                            successLabel.childNodes[0].textContent = '成功节点: ';
+                            document.getElementById('successText').textContent = 'N/A';
+                        }
                     }
                 }
             })
@@ -841,37 +963,35 @@
                 const statusContainer = document.getElementById('statusContainer');
                 const statusIcon = document.getElementById('statusIcon');
                 const statusText = document.getElementById('nextCheckTime');
-                
+
                 statusContainer.className = 'text-danger';
                 statusIcon.className = 'bi bi-exclamation-triangle me-1';
                 statusText.textContent = '获取状态失败';
-                
-                // 显示N/A
+
                 document.getElementById('progressText').textContent = 'N/A';
                 document.getElementById('progressPercent').textContent = 'N/A';
                 document.getElementById('processPercent').textContent = 'N/A';
-                document.getElementById('successText').textContent = 'N/A';
                 document.getElementById('progressBarTotal').style.width = '0%';
                 document.getElementById('progressBarSuccess').style.width = '0%';
             });
         }
-        
+
         // 初始加载
         loadConfig();
         updateStatus();
         loadLogs();
-        
+
         // 检查API密钥
         const apiKey = localStorage.getItem('apiKey');
         if (!apiKey) {
             alert('请先输入API密钥以使用本系统');
             document.getElementById('apiKey').focus();
         }
-        
+
         // 定时刷新
         setInterval(loadLogs, 10000);
-        setInterval(updateStatus, 5000);
-        
+        setInterval(updateStatus, 3000);
+
         // 获取版本信息
         function getVersionInfo() {
             fetch('/api/version', {
@@ -888,11 +1008,10 @@
                 document.getElementById('versionInfo').textContent = '版本: 未知';
             });
         }
-        
-        // 初始加载版本信息
+
         getVersionInfo();
     </script>
-    
+
     <!-- YAML解析库 -->
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 </body>

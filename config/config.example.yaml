@@ -2,12 +2,12 @@
 print-progress: true
 
 # 并发线程数（测活阶段使用此值）
-concurrent: 20
+concurrent: 50
 # 测速并发数（默认等于concurrent）
-# 建议设置较低值（如3-5），避免并发抢带宽导致测速不准
-# speed-concurrent: 20
+# 建议设置较低值，避免并发抢带宽导致测速不准
+speed-concurrent: 20
 # 流媒体检测并发数（默认等于concurrent）
-# media-concurrent: 20
+media-concurrent: 20
 # 检查间隔(分钟)
 # 必须大于0，小于等于0会设置间隔1分钟
 check-interval: 120
@@ -83,7 +83,7 @@ filter:
 # 是否开启流媒体检测，其中IP欺诈依赖重命名
 media-check: false
 # 流媒体检测超时时间(秒)，未设置则默认为10秒
-media-check-timeout: 10
+media-check-timeout: 5
 platforms:
   - iprisk
   - tiktok

@@ -6,35 +6,43 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"log/slog"
 
-	"github.com/beck-8/subs-check/config"
 	"github.com/metacubex/mihomo/common/convert"
 )
 
+type geoResult struct {
+	loc string
+	ip  string
+}
+
+// GetProxyCountry 并行请求所有 IP 查询端点，按优先级返回最优结果
 func GetProxyCountry(httpClient *http.Client) (loc string, ip string) {
-	for i := 0; i < config.GlobalConfig.SubUrlsReTry; i++ {
-		loc, ip = GetMe(httpClient)
-		if loc != "" && ip != "" {
-			return
-		}
-		loc, ip = GetIpinfo(httpClient)
-		if loc != "" && ip != "" {
-			return
-		}
-		loc, ip = GetIPSB(httpClient)
-		if loc != "" && ip != "" {
-			return
-		}
-		loc, ip = GetCFProxy(httpClient)
-		if loc != "" && ip != "" {
-			return
-		}
-		// 不准
-		loc, ip = GetEdgeOneProxy(httpClient)
-		if loc != "" && ip != "" {
-			return
+	// 顺序代表优先级，索引越小质量越高
+	checkers := []func(*http.Client) (string, string){
+		GetMe, GetIpinfo, GetCFProxy, GetEdgeOneProxy,
+	}
+
+	results := make([]geoResult, len(checkers))
+	var wg sync.WaitGroup
+
+	for idx, fn := range checkers {
+		wg.Add(1)
+		go func(i int, f func(*http.Client) (string, string)) {
+			defer wg.Done()
+			l, p := f(httpClient)
+			results[i] = geoResult{l, p}
+		}(idx, fn)
+	}
+
+	wg.Wait()
+
+	// 按优先级返回第一个成功的结果
+	for _, res := range results {
+		if res.loc != "" && res.ip != "" {
+			return res.loc, res.ip
 		}
 	}
 	return
@@ -57,7 +65,7 @@ func GetEdgeOneProxy(httpClient *http.Client) (loc string, ip string) {
 		return
 	}
 	req.Header.Set("User-Agent", convert.RandUserAgent())
-	resp, err := httpClient.Get(url)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		slog.Debug(fmt.Sprintf("edgeone获取节点位置失败: %s", err))
 		return
@@ -93,7 +101,7 @@ func GetCFProxy(httpClient *http.Client) (loc string, ip string) {
 		return
 	}
 	req.Header.Set("User-Agent", convert.RandUserAgent())
-	resp, err := httpClient.Get(url)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		slog.Debug(fmt.Sprintf("cf获取节点位置失败: %s", err))
 		return
