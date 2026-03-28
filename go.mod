@@ -15,6 +15,7 @@ require (
 require (
 	github.com/dunglas/httpsfv v1.0.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/gin-contrib/pprof v1.5.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect

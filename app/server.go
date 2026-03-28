@@ -7,13 +7,13 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"time"
 
 	"github.com/beck-8/subs-check/check"
 	"github.com/beck-8/subs-check/config"
 	"github.com/beck-8/subs-check/save/method"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )
@@ -41,7 +41,7 @@ func (app *App) initHttpServer() error {
 	router.Static("/sub/", saver.OutputPath)
 
 	// pprof 路由，空闲时不消耗性能
-	router.GET("/debug/pprof/*any", gin.WrapH(http.DefaultServeMux))
+	pprof.Register(router)
 
 	// 根据配置决定是否启用Web控制面板
 	if config.GlobalConfig.EnableWebUI {
