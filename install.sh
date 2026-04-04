@@ -171,7 +171,8 @@ setup_systemd() {
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Subs Check - 订阅检测转换工具
-After=network.target
+After=network-online.target
+Wants=network-online.target
 StartLimitBurst=5
 StartLimitIntervalSec=60
 
