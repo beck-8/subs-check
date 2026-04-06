@@ -411,6 +411,10 @@ func (pc *ProxyChecker) checkAlive(proxy map[string]any) *aliveResult {
 
 // checkSpeed 对存活代理执行测速
 func (pc *ProxyChecker) checkSpeed(a aliveResult) *speedResult {
+	if os.Getenv("SUB_CHECK_SKIP") != "" {
+		return &speedResult{Proxy: a.Proxy, Speed: 0}
+	}
+
 	httpClient := CreateClient(a.Proxy)
 	if httpClient == nil {
 		slog.Debug(fmt.Sprintf("创建代理Client失败: %v", a.Proxy["name"]))
@@ -431,6 +435,11 @@ func (pc *ProxyChecker) checkSpeed(a aliveResult) *speedResult {
 func (pc *ProxyChecker) checkMedia(sr speedResult) *Result {
 	res := &Result{
 		Proxy: sr.Proxy,
+	}
+
+	if os.Getenv("SUB_CHECK_SKIP") != "" {
+		pc.incrementAvailable()
+		return res
 	}
 
 	httpClient := CreateClient(sr.Proxy)
