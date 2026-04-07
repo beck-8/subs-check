@@ -92,6 +92,9 @@ func (app *App) Initialize() error {
 		time.Sleep(500 * time.Millisecond)
 	}
 
+	// 设置 DSCP 标记
+	utils.SetDSCP()
+
 	// 启动内存监控
 	monitor.StartMemoryMonitor()
 

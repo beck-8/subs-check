@@ -164,6 +164,13 @@ sub-store-push-service: ""
 # 如果你想替换其他的自定义覆写文件，自己命名后放在output目录，然后更改此URL后缀即可
 mihomo-overwrite-url: "http://127.0.0.1:8199/sub/ACL4SSR_Online_Full.yaml"
 
+# DSCP 标记（仅 Linux 生效）
+# 设置后 subs-check 发出的所有流量会带上指定的 DSCP 值
+# 可在 OpenWrt 上通过 iptables 匹配 DSCP 实现检测流量直连
+# 例如设置 46 后: iptables -t mangle -A OUTPUT -m dscp --dscp 46 -j MARK --set-mark 0xff
+# 取值范围 1-63，0 = 关闭
+dscp: 0
+
 # 保存方法
 # 目前支持的保存方法: r2, local, gist, webdav, s3
 save-method: local

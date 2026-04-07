@@ -66,6 +66,7 @@ type Config struct {
 	CallbackScript       string   `yaml:"callback-script"`
 	Filter               []string `yaml:"filter"`
 	KeepDays             int      `yaml:"keep-days"`
+	DSCP                 int      `yaml:"dscp"`
 }
 
 var GlobalConfig = &Config{
