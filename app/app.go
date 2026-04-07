@@ -229,19 +229,17 @@ func (app *App) triggerCheck() {
 func (app *App) checkProxies() error {
 	slog.Info("开始准备检测代理", "进度展示", config.GlobalConfig.PrintProgress)
 
+	// 加载历史可用节点到待测队列
+	if config.GlobalConfig.KeepDays > 0 {
+		if hp := save.LoadHistoryProxies(); len(hp) > 0 {
+			config.GlobalProxies = append(config.GlobalProxies, hp...)
+		}
+	}
+
 	results, err := check.Check()
 	if err != nil {
 		return fmt.Errorf("检测代理失败: %w", err)
 	}
-	// 将成功的节点添加到全局中，暂时内存保存
-	if config.GlobalConfig.KeepSuccessProxies {
-		for _, result := range results {
-			if result.Proxy != nil {
-				config.GlobalProxies = append(config.GlobalProxies, result.Proxy)
-			}
-		}
-	}
-
 	slog.Info("检测完成")
 	save.SaveConfig(results)
 	utils.SendNotify(len(results))

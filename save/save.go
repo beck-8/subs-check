@@ -30,7 +30,12 @@ func SaveConfig(results []check.Result) {
 		slog.Error(fmt.Sprintf("保存all.yaml到本地失败: %v", err))
 	}
 
-	// 3. 更新 SubStore 并获取衍生文件（mihomo.yaml / base64.txt）
+	// 3. 保存历史快照（如 history/all_2026-04-07_1430.yaml）
+	if config.GlobalConfig.KeepDays > 0 {
+		SaveHistory(allYamlData)
+	}
+
+	// 4. 更新 SubStore 并获取衍生文件（mihomo.yaml / base64.txt）
 	var mihomoData, base64Data []byte
 	if config.GlobalConfig.SubStorePort != "" {
 		utils.UpdateSubStore(allYamlData)
@@ -44,11 +49,11 @@ func SaveConfig(results []check.Result) {
 		)
 	}
 
-	// 4. 保存衍生文件到本地
+	// 5. 保存衍生文件到本地
 	saveIfNotEmpty(method.SaveToLocal, mihomoData, "mihomo.yaml")
 	saveIfNotEmpty(method.SaveToLocal, base64Data, "base64.txt")
 
-	// 5. 保存所有文件到远程（如果配置了远程保存方式）
+	// 6. 保存所有文件到远程（如果配置了远程保存方式）
 	if config.GlobalConfig.SaveMethod == "local" {
 		return
 	}

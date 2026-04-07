@@ -127,10 +127,10 @@ func Check() ([]Result, error) {
 
 	TotalBytes.Store(0)
 
-	// 之前好的节点前置
+	// keep-days 历史节点前置
 	var proxies []map[string]any
-	if config.GlobalConfig.KeepSuccessProxies {
-		slog.Info(fmt.Sprintf("添加之前测试成功的节点，数量: %d", len(config.GlobalProxies)))
+	if len(config.GlobalProxies) > 0 {
+		slog.Info(fmt.Sprintf("添加历史待测节点，数量: %d", len(config.GlobalProxies)))
 		proxies = append(proxies, config.GlobalProxies...)
 	}
 	tmp, err := proxyutils.GetProxies()
@@ -665,8 +665,8 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 // showProgress 显示进度条
 func (pc *ProxyChecker) showProgress(done chan bool) {
 	type phaseInfo struct {
-		name        string
-		countLabel  string
+		name       string
+		countLabel string
 	}
 	phases := map[uint32]phaseInfo{
 		1: {"测活", "存活"},
