@@ -17,7 +17,6 @@ const (
 	historyDir        = "history"
 	historyPrefix     = "all_"
 	historyTimeFormat = "2006-01-02_1504"
-	historyDateFormat = "2006-01-02"
 )
 
 // SaveHistory 保存本次检测的节点快照，如 history/all_2026-04-07_1430.yaml
@@ -74,11 +73,7 @@ func LoadHistoryProxies() []map[string]any {
 func parseTimeFromFilename(name string) (time.Time, bool) {
 	name = strings.TrimPrefix(name, historyPrefix)
 	name = strings.TrimSuffix(name, ".yaml")
-	t, err := time.Parse(historyTimeFormat, name)
-	if err != nil {
-		// 兼容旧的纯日期格式
-		t, err = time.Parse(historyDateFormat, name)
-	}
+	t, err := time.ParseInLocation(historyTimeFormat, name, time.Local)
 	return t, err == nil
 }
 

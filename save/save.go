@@ -18,24 +18,24 @@ type SaveFunc func(data []byte, filename string) error
 
 // SaveConfig 保存检查结果到本地，并可选保存到远程存储
 func SaveConfig(results []check.Result) {
-	// 1. 提取代理节点并序列化
+	// 提取代理节点并序列化
 	allYamlData, err := marshalProxies(results)
 	if err != nil {
 		slog.Error(fmt.Sprintf("序列化代理数据失败: %v", err))
 		return
 	}
 
-	// 2. 保存 all.yaml 到本地
+	// 保存 all.yaml 到本地
 	if err := method.SaveToLocal(allYamlData, "all.yaml"); err != nil {
 		slog.Error(fmt.Sprintf("保存all.yaml到本地失败: %v", err))
 	}
 
-	// 3. 保存历史快照（如 history/all_2026-04-07_1430.yaml）
+	// 保存历史快照
 	if config.GlobalConfig.KeepDays > 0 {
 		SaveHistory(allYamlData)
 	}
 
-	// 4. 更新 SubStore 并获取衍生文件（mihomo.yaml / base64.txt）
+	// 更新 SubStore 并获取衍生文件（mihomo.yaml / base64.txt）
 	var mihomoData, base64Data []byte
 	if config.GlobalConfig.SubStorePort != "" {
 		utils.UpdateSubStore(allYamlData)
@@ -49,11 +49,11 @@ func SaveConfig(results []check.Result) {
 		)
 	}
 
-	// 5. 保存衍生文件到本地
+	// 保存衍生文件到本地
 	saveIfNotEmpty(method.SaveToLocal, mihomoData, "mihomo.yaml")
 	saveIfNotEmpty(method.SaveToLocal, base64Data, "base64.txt")
 
-	// 6. 保存所有文件到远程（如果配置了远程保存方式）
+	// 保存所有文件到远程（如果配置了远程保存方式）
 	if config.GlobalConfig.SaveMethod == "local" {
 		return
 	}
