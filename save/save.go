@@ -29,6 +29,13 @@ type SaveFunc func(data []byte, filename string) error
 // 隐式契约: SaveConfig 调用后 results 视为已消费,调用方不应再读
 // results[i].Proxy["name"](那已经是展示名,不是原始名)。
 func SaveConfig(results []check.Result) {
+	// 0 节点是常见的合理结果(如全部超时或全部被 filter 过滤),
+	// 此时所有下游序列化都会失败,统一在入口短路并以 Warn 记录,避免多余的 Error 日志
+	if len(results) == 0 {
+		slog.Warn("本轮没有可保存的节点,跳过保存")
+		return
+	}
+
 	// ① 先写 history,此时 proxy["name"] 仍是原始值,history yaml 天然干净
 	if config.GlobalConfig.KeepDays > 0 {
 		historyYamlData, err := marshalProxies(results)
