@@ -28,17 +28,17 @@ func RenderName(r Result, includeSpeed bool) string {
 		}
 	}
 
-	// 2. 按 config.Platforms 顺序收集媒体标签
+	// 2. 速度标签(仅 includeSpeed 且有速度时追加,放在媒体标签之前以保持与旧版相同的展示顺序)
 	var tags []string
+	if includeSpeed && config.GlobalConfig.SpeedTestUrl != "" && r.Speed > 0 {
+		tags = append(tags, formatSpeedTag(r.Speed))
+	}
+
+	// 3. 按 config.Platforms 顺序收集媒体标签
 	for _, plat := range config.GlobalConfig.Platforms {
 		if tag := mediaTagFor(plat, &r); tag != "" {
 			tags = append(tags, tag)
 		}
-	}
-
-	// 3. 速度标签(仅 includeSpeed 且有速度时追加)
-	if includeSpeed && config.GlobalConfig.SpeedTestUrl != "" && r.Speed > 0 {
-		tags = append(tags, formatSpeedTag(r.Speed))
 	}
 
 	// 4. sub_tag 追加到最后

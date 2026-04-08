@@ -162,6 +162,27 @@ func TestRenderName_SpeedZero_NoSpeedTag(t *testing.T) {
 	})
 }
 
+func TestRenderName_SpeedBeforeMediaTags(t *testing.T) {
+	// 锁定标签顺序: base | speed | media-tags | sub_tag
+	withConfig(t, config.Config{
+		RenameNode:   false,
+		SpeedTestUrl: "https://example.com/file",
+		Platforms:    []string{"openai", "netflix"},
+	}, func() {
+		r := Result{
+			Proxy:   map[string]any{"name": "n", "sub_tag": "tag"},
+			Speed:   5120, // 5.0MB/s
+			Openai:  &platform.OpenAIResult{Full: true, Region: "HK"},
+			Netflix: &platform.NetflixResult{Full: true, Region: "HK"},
+		}
+		got := RenderName(r, true)
+		want := "n|5.0MB/s|GPT⁺-HK|NF-HK|tag"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
 func TestRenderName_SubTagAppendedLast(t *testing.T) {
 	withConfig(t, config.Config{
 		RenameNode: false,
