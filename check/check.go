@@ -278,15 +278,13 @@ func (pc *ProxyChecker) runAlivePhase(proxies []map[string]any, concurrency int,
 // runSpeedPhase 执行测速阶段。
 // 入参是已经通过 filter 的 Result 集合。
 // 通过 min-speed 的节点填充 Result.Speed;未通过的节点被丢弃。
-// ForceClose 时未测速的节点以 Speed=0 保留(不丢弃,不加速度标签)。
-// SuccessLimit 时未测速的节点直接丢弃。
+// ForceClose 或 SuccessLimit 时未测速的节点都直接丢弃,
+// 避免和已测速节点混在一起造成"有的有速度标签有的没有"的乱象。
 func (pc *ProxyChecker) runSpeedPhase(in []Result, concurrency int) []Result {
 	var results []Result
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	tasks := make(chan Result, 1)
-	var distributed int32
-	var stoppedByForceClose atomic.Bool
 
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
@@ -305,46 +303,33 @@ func (pc *ProxyChecker) runSpeedPhase(in []Result, concurrency int) []Result {
 	}
 
 	go func() {
-		for i, r := range in {
+		for _, r := range in {
 			if config.GlobalConfig.SuccessLimit > 0 && atomic.LoadInt32(&pc.available) >= config.GlobalConfig.SuccessLimit {
 				slog.Warn(fmt.Sprintf("达到测速成功数量限制: %d，停止派发", config.GlobalConfig.SuccessLimit))
-				atomic.StoreInt32(&distributed, int32(i))
 				break
 			}
 			if ForceClose.Load() {
-				slog.Warn("收到强制关闭信号，停止派发测速任务，未测速节点将直接保留")
-				stoppedByForceClose.Store(true)
-				atomic.StoreInt32(&distributed, int32(i))
+				slog.Warn("收到强制关闭信号，停止派发测速任务，未测速节点将丢弃")
 				break
 			}
 			tasks <- r
-			atomic.StoreInt32(&distributed, int32(i+1))
 		}
 		close(tasks)
 	}()
 
 	wg.Wait()
-
-	// 仅 ForceClose 时保留未测速节点，SuccessLimit 时不保留
-	if stoppedByForceClose.Load() {
-		skipped := in[atomic.LoadInt32(&distributed):]
-		for _, r := range skipped {
-			results = append(results, r) // Speed 保持 0
-		}
-	}
-
 	return results
 }
 
 // runMediaPhase 执行流媒体检测 + 国家查询阶段。
-// 不会丢弃节点,也不会修改 proxy["name"];所有结果写入 Result 的结构化字段。
-// ForceClose 时未检测的节点以空 Result{Proxy} 加入输出。
+// 不会修改 proxy["name"];检测结果写入 Result 的结构化字段。
+// ForceClose 时未派发的节点直接丢弃,只输出已完成检测的节点,
+// 避免和已检测节点混在一起造成"有的有标签有的没有"的乱象。
 func (pc *ProxyChecker) runMediaPhase(alive []aliveResult, concurrency int) []Result {
 	var results []Result
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	tasks := make(chan aliveResult, 1)
-	var distributed int32
 
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
@@ -361,26 +346,17 @@ func (pc *ProxyChecker) runMediaPhase(alive []aliveResult, concurrency int) []Re
 	}
 
 	go func() {
-		for i, a := range alive {
+		for _, a := range alive {
 			if ForceClose.Load() {
-				slog.Warn("收到强制关闭信号，停止派发流媒体任务，未检测节点将直接保留")
-				atomic.StoreInt32(&distributed, int32(i))
+				slog.Warn("收到强制关闭信号，停止派发流媒体任务，未检测节点将丢弃")
 				break
 			}
 			tasks <- a
-			atomic.StoreInt32(&distributed, int32(i+1))
 		}
 		close(tasks)
 	}()
 
 	wg.Wait()
-
-	// 将未派发的节点以空 Result 加入输出，让它们还能参与后续 filter
-	skipped := alive[atomic.LoadInt32(&distributed):]
-	for _, a := range skipped {
-		results = append(results, Result{Proxy: a.Proxy})
-	}
-
 	return results
 }
 
