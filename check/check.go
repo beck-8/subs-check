@@ -570,7 +570,11 @@ func (pc *ProxyChecker) showProgress(done chan bool) {
 	for {
 		select {
 		case <-done:
-			fmt.Println()
+			// pauseProgress 已经在阶段结束时把 \r 行收尾换行了,
+			// 这里只在还有未收尾的进度行时才补换行,避免在已经干净的输出后多插一个空行
+			if progressRendered.Load() {
+				fmt.Println()
+			}
 			return
 		default:
 			if progressPaused.Load() {
@@ -612,7 +616,8 @@ func pauseProgress() {
 	progressPaused.Store(true)
 	time.Sleep(150 * time.Millisecond) // 等待进度条goroutine停止输出
 	if progressRendered.Load() {
-		fmt.Println() // 仅在进度条实际输出过时才换行
+		fmt.Println()                  // 仅在进度条实际输出过时才换行
+		progressRendered.Store(false) // 标记换行已收尾,避免后续 done 信号重复换行
 	}
 }
 
