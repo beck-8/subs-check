@@ -39,6 +39,7 @@ type Result struct {
 	IP         string
 	IPRisk     string
 	Country    string
+	Speed      int // KB/s, 0 表示未测速或测速未通过
 }
 
 // aliveResult 存活检测通过的中间结果
