@@ -22,18 +22,18 @@ func FilterResults(results []Result) []Result {
 	for _, pattern := range config.GlobalConfig.Filter {
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			slog.Warn(fmt.Sprintf("过滤正则表达式编译失败,已跳过: %s, 错误: %v", pattern, err))
+			slog.Warn(fmt.Sprintf("过滤正则表达式编译失败，已跳过: %s, 错误: %v", pattern, err))
 			continue
 		}
 		patterns = append(patterns, re)
 	}
 
 	if len(patterns) == 0 {
-		slog.Warn("所有过滤正则表达式编译失败,跳过过滤")
+		slog.Warn("所有过滤正则表达式编译失败，跳过过滤")
 		return results
 	}
 
-	slog.Info(fmt.Sprintf("应用节点过滤规则,共 %d 个正则表达式", len(patterns)))
+	slog.Info(fmt.Sprintf("应用节点过滤规则，共 %d 个正则表达式", len(patterns)))
 
 	var filtered []Result
 	for _, r := range results {

@@ -442,7 +442,7 @@ func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 
 	httpClient := CreateClient(a.Proxy)
 	if httpClient == nil {
-		slog.Debug(fmt.Sprintf("创建代理Client失败,跳过流媒体检测: %v", a.Proxy["name"]))
+		slog.Debug(fmt.Sprintf("创建代理Client失败，跳过流媒体检测: %v", a.Proxy["name"]))
 		pc.incrementAvailable()
 		return res
 	}
@@ -554,7 +554,6 @@ func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 	pc.incrementAvailable()
 	return res
 }
-
 
 // showProgress 显示进度条
 func (pc *ProxyChecker) showProgress(done chan bool) {

@@ -32,7 +32,7 @@ func SaveConfig(results []check.Result) {
 	// 0 节点是常见的合理结果(如全部超时或全部被 filter 过滤),
 	// 此时所有下游序列化都会失败,统一在入口短路并以 Warn 记录,避免多余的 Error 日志
 	if len(results) == 0 {
-		slog.Warn("本轮没有可保存的节点,跳过保存")
+		slog.Warn("本轮没有可保存的节点，跳过保存")
 		return
 	}
 
