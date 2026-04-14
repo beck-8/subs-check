@@ -21,6 +21,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type subEntry struct {
+	url    string
+	source string
+}
+
 func GetProxies() ([]map[string]any, error) {
 
 	// 解析本地与远程订阅清单
@@ -50,13 +55,14 @@ func GetProxies() ([]map[string]any, error) {
 		wg.Add(1)
 		concurrentLimit <- struct{}{} // 获取令牌
 
-		go func(url string) {
+		go func(e subEntry) {
 			defer wg.Done()
 			defer func() { <-concurrentLimit }() // 释放令牌
 
+			url := e.url
 			data, err := GetDateFromSubs(url)
 			if err != nil {
-				slog.Error(fmt.Sprintf("获取订阅链接错误跳过: %v", err))
+				slog.Error(fmt.Sprintf("获取订阅链接错误跳过 [来源:%s]: %v", e.source, err))
 				return
 			}
 
@@ -128,7 +134,7 @@ func GetProxies() ([]map[string]any, error) {
 					proxyChan <- proxyMap
 				}
 			}
-		}(utils.WarpUrl(subUrl))
+		}(subEntry{url: utils.WarpUrl(subUrl.url), source: subUrl.source})
 	}
 
 	// 等待所有工作协程完成
@@ -141,14 +147,16 @@ func GetProxies() ([]map[string]any, error) {
 
 // from 3k
 // resolveSubUrls 合并本地与远程订阅清单并去重
-func resolveSubUrls() ([]string, int, int) {
+func resolveSubUrls() ([]subEntry, int, int) {
 	// 计数
 	var localNum, remoteNum int
 	localNum = len(config.GlobalConfig.SubUrls)
 
-	urls := make([]string, 0, len(config.GlobalConfig.SubUrls))
+	entries := make([]subEntry, 0, len(config.GlobalConfig.SubUrls))
 	// 本地配置
-	urls = append(urls, config.GlobalConfig.SubUrls...)
+	for _, u := range config.GlobalConfig.SubUrls {
+		entries = append(entries, subEntry{url: u, source: "本地配置"})
+	}
 
 	// 远程清单
 	if len(config.GlobalConfig.SubUrlsRemote) != 0 {
@@ -157,17 +165,18 @@ func resolveSubUrls() ([]string, int, int) {
 				slog.Warn("获取远程订阅清单失败，已忽略", "err", err)
 			} else {
 				remoteNum += len(remote)
-				urls = append(urls, remote...)
+				for _, u := range remote {
+					entries = append(entries, subEntry{url: u, source: d})
+				}
 			}
 		}
-
 	}
 
 	// 规范化与去重
-	seen := make(map[string]struct{}, len(urls))
-	out := make([]string, 0, len(urls))
-	for _, s := range urls {
-		s = strings.TrimSpace(s)
+	seen := make(map[string]struct{}, len(entries))
+	out := make([]subEntry, 0, len(entries))
+	for _, e := range entries {
+		s := strings.TrimSpace(e.url)
 		if s == "" || strings.HasPrefix(s, "#") { // 跳过空行与注释
 			continue
 		}
@@ -175,7 +184,7 @@ func resolveSubUrls() ([]string, int, int) {
 			continue
 		}
 		seen[s] = struct{}{}
-		out = append(out, s)
+		out = append(out, subEntry{url: s, source: e.source})
 	}
 	return out, localNum, remoteNum
 }
@@ -267,13 +276,14 @@ func GetDateFromSubs(subUrl string) ([]byte, error) {
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
+			resp.Body.Close()
 			lastErr = fmt.Errorf("订阅链接: %s 返回状态码: %d", subUrl, resp.StatusCode)
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("读取订阅链接: %s 数据错误: %v", subUrl, err)
 			continue

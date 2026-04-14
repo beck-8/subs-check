@@ -78,6 +78,7 @@ var GlobalConfig = &Config{
 	DownloadMB:         20,
 	AliveTestUrl:       "http://gstatic.com/generate_204",
 	SubUrlsGetUA:       "clash.meta (https://github.com/beck-8/subs-check)",
+	SubUrlsReTry:       3,
 }
 
 //go:embed config.example.yaml
