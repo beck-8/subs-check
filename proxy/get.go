@@ -62,7 +62,7 @@ func GetProxies() ([]map[string]any, error) {
 			url := e.url
 			data, err := GetDateFromSubs(url)
 			if err != nil {
-				slog.Error(fmt.Sprintf("获取订阅链接错误跳过 [来源:%s]: %v", e.source, err))
+				slog.Error("获取订阅链接错误跳过", "source", e.source, "url", url, "err", err)
 				return
 			}
 
@@ -76,10 +76,10 @@ func GetProxies() ([]map[string]any, error) {
 			if err != nil {
 				proxyList, err := convert.ConvertsV2Ray(data)
 				if err != nil {
-					slog.Error(fmt.Sprintf("解析proxy错误: %v", err), "url", url)
+					slog.Error("解析proxy错误", "source", e.source, "url", url, "err", err)
 					return
 				}
-				slog.Debug(fmt.Sprintf("获取订阅链接: %s，有效节点数量: %d", url, len(proxyList)))
+				slog.Debug("获取订阅链接", "source", e.source, "url", url, "count", len(proxyList))
 				for _, proxy := range proxyList {
 					// 只测试指定协议
 					if t, ok := proxy["type"].(string); ok {
@@ -100,7 +100,7 @@ func GetProxies() ([]map[string]any, error) {
 
 			proxyInterface, ok := con["proxies"]
 			if !ok || proxyInterface == nil {
-				slog.Error(fmt.Sprintf("订阅链接没有proxies: %s", url))
+				slog.Error("订阅链接没有proxies", "source", e.source, "url", url)
 				return
 			}
 
@@ -108,7 +108,7 @@ func GetProxies() ([]map[string]any, error) {
 			if !ok {
 				return
 			}
-			slog.Debug(fmt.Sprintf("获取订阅链接: %s，有效节点数量: %d", url, len(proxyList)))
+			slog.Debug("获取订阅链接", "source", e.source, "url", url, "count", len(proxyList))
 			for _, proxy := range proxyList {
 				if proxyMap, ok := proxy.(map[string]any); ok {
 					if t, ok := proxyMap["type"].(string); ok {
@@ -162,7 +162,7 @@ func resolveSubUrls() ([]subEntry, int, int) {
 	if len(config.GlobalConfig.SubUrlsRemote) != 0 {
 		for _, d := range config.GlobalConfig.SubUrlsRemote {
 			if remote, err := fetchRemoteSubUrls(utils.WarpUrl(d)); err != nil {
-				slog.Warn("获取远程订阅清单失败，已忽略", "err", err)
+				slog.Warn("获取远程订阅清单失败，已忽略", "url", d, "err", err)
 			} else {
 				remoteNum += len(remote)
 				for _, u := range remote {
@@ -254,7 +254,7 @@ func GetDateFromSubs(subUrl string) ([]byte, error) {
 		},
 	}
 
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		if i > 0 {
 			time.Sleep(time.Duration(retryInterval) * time.Second)
 		}
@@ -278,18 +278,18 @@ func GetDateFromSubs(subUrl string) ([]byte, error) {
 		}
 		if resp.StatusCode != 200 {
 			resp.Body.Close()
-			lastErr = fmt.Errorf("订阅链接: %s 返回状态码: %d", subUrl, resp.StatusCode)
+			lastErr = fmt.Errorf("返回状态码: %d", resp.StatusCode)
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			lastErr = fmt.Errorf("读取订阅链接: %s 数据错误: %v", subUrl, err)
+			lastErr = fmt.Errorf("读取响应数据错误: %w", err)
 			continue
 		}
 		return body, nil
 	}
 
-	return nil, fmt.Errorf("重试%d次后失败: %v", maxRetries, lastErr)
+	return nil, fmt.Errorf("重试%d次后失败: %w", maxRetries, lastErr)
 }
