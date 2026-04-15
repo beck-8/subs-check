@@ -1,0 +1,32 @@
+name: Auto Node Check
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # 每 6 小时自动运行
+  workflow_dispatch: # 支持手动点击运行
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Sub-Check
+        run: python main.py # 运行检测主程序
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add output/*.txt output/*.yaml
+          git commit -m "Update clean nodes" || exit 0
+          git push
