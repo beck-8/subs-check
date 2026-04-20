@@ -66,6 +66,17 @@ type Config struct {
 	CallbackScript       string   `yaml:"callback-script"`
 	Filter               []string `yaml:"filter"`
 	KeepDays             int      `yaml:"keep-days"`
+	DNS                  DNSConfig `yaml:"dns"`
+}
+
+// DNSConfig controls mihomo's global resolver used by every proxy probe.
+// Leaving Enable=false keeps the historical behavior (mihomo SystemResolver, v4 only).
+type DNSConfig struct {
+	Enable                bool     `yaml:"enable"`
+	IPv6                  bool     `yaml:"ipv6"`
+	Nameserver            []string `yaml:"nameserver"`
+	ProxyServerNameserver []string `yaml:"proxy-server-nameserver"`
+	DefaultNameserver     []string `yaml:"default-nameserver"`
 }
 
 var GlobalConfig = &Config{

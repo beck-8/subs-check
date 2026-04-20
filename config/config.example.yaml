@@ -215,6 +215,21 @@ github-proxy: ""
 proxy: ""
 # 符合条件节点数量的占比，低于此值会将订阅链接打印出来，用于排查质量差的订阅
 success-rate: 0
+
+# DNS 配置，支持 udp/tcp/tls/https/quic 协议
+# enable=true 时三个字段都可留空：proxy-server-nameserver→nameserver→default-nameserver→[223.5.5.5,119.29.29.29]
+# default-nameserver 用作 bootstrap 必须是纯 IP
+# dns:
+#   enable: true
+#   ipv6: false
+#   nameserver:
+#     - https://dns.alidns.com/dns-query
+#   proxy-server-nameserver:
+#     - https://dns.alidns.com/dns-query
+#   default-nameserver:
+#     - 223.5.5.5
+#     - 119.29.29.29
+
 # 远程订阅清单地址；用于集中维护多个订阅链接，避免频繁修改本地文件
 # 支持两种格式：
 # 1) 纯文本：按行分隔，支持 # 注释与空行

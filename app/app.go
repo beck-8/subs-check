@@ -59,6 +59,11 @@ func (app *App) Initialize() error {
 		return fmt.Errorf("加载配置文件失败: %w", err)
 	}
 
+	// 初始化 DNS resolver（必须在任何 proxy 连接之前，影响 mihomo 全局 resolver）
+	if err := initResolver(); err != nil {
+		return fmt.Errorf("初始化 DNS 失败: %w", err)
+	}
+
 	// 初始化配置文件监听
 	if err := app.initConfigWatcher(); err != nil {
 		return fmt.Errorf("初始化配置文件监听失败: %w", err)
