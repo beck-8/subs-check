@@ -3,11 +3,13 @@ package proxies
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	u "net/url"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/beck-8/subs-check/config"
 	"github.com/beck-8/subs-check/utils"
 	"github.com/metacubex/mihomo/common/convert"
+	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 )
@@ -246,19 +249,25 @@ func GetDateFromSubs(subUrl string) ([]byte, error) {
 	}
 	var lastErr error
 
-	client := &http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
 		},
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	// Route DNS through the configured mihomo resolver so subscription domains aren't leaked to system DNS.
+	// Only when user enabled custom DNS — keeps default behavior unchanged for existing users.
+	if config.GlobalConfig.DNS.Enable {
+		transport.DialContext = newMihomoDialer(time.Duration(timeout) * time.Second)
+	}
+	client := &http.Client{
+		Timeout:   time.Duration(timeout) * time.Second,
+		Transport: transport,
 	}
 
 	for i := range maxRetries {
@@ -299,4 +308,38 @@ func GetDateFromSubs(subUrl string) ([]byte, error) {
 	}
 
 	return nil, fmt.Errorf("重试%d次后失败: %w", maxRetries, lastErr)
+}
+
+// newMihomoDialer returns a DialContext that resolves via mihomo's global resolver
+// (DoH when configured) then dials the resulting IP directly, avoiding the OS DNS path.
+// dialTimeout is shared with the request-level timeout from SubUrlsTimeout.
+func newMihomoDialer(dialTimeout time.Duration) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: dialTimeout}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		// If addr is already an IP, skip resolution.
+		if ip := net.ParseIP(host); ip != nil {
+			return d.DialContext(ctx, network, addr)
+		}
+		ips, err := resolver.LookupIP(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s: %w", host, err)
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("no ip for %s", host)
+		}
+		// Try each IP in turn, returning on the first successful connection.
+		var dialErr error
+		for _, ip := range ips {
+			conn, err := d.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			dialErr = err
+		}
+		return nil, fmt.Errorf("dial %s: %w", host, dialErr)
+	}
 }
