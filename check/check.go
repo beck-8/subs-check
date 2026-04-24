@@ -204,7 +204,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	}
 
 	slog.Info("开始检测节点")
-	slog.Info("当前参数", "timeout", config.GlobalConfig.Timeout, "concurrent", config.GlobalConfig.Concurrent, "speed-concurrent", config.GlobalConfig.SpeedConcurrent, "media-concurrent", config.GlobalConfig.MediaConcurrent, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit)
+	slog.Info("当前参数", "timeout", config.GlobalConfig.Timeout, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit)
 
 	ResetPhaseResults()
 
@@ -265,21 +265,28 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	}
 
 	// Collector: place items in pre-allocated slots to preserve subscription order.
+	// The SuccessLimit hit notice is *not* logged here: emitting slog output
+	// mid-render interleaves with the progress writer and breaks cursor-up
+	// positioning. We remember whether we tripped the limit and log it after
+	// pauseProgress has parked the renderer.
 	out := make([]*Result, total)
 	var finalPassed int32
-	limitLogged := false
+	limitHit := false
 	for item := range collectIn {
 		r := item.r
 		out[item.idx] = &r
 		finalPassed++
-		if config.GlobalConfig.SuccessLimit > 0 && finalPassed >= config.GlobalConfig.SuccessLimit && !limitLogged {
-			slog.Warn(fmt.Sprintf("达到成功数量限制: %d，停止流水线", config.GlobalConfig.SuccessLimit))
-			limitLogged = true
+		if config.GlobalConfig.SuccessLimit > 0 && finalPassed >= config.GlobalConfig.SuccessLimit && !limitHit {
+			limitHit = true
 			cancel()
 		}
 	}
 
 	pauseProgress()
+
+	if limitHit {
+		slog.Warn(fmt.Sprintf("达到成功数量限制: %d，已停止流水线", config.GlobalConfig.SuccessLimit))
+	}
 
 	// Snapshot per-stage results. Totals cascade: alive counts against input,
 	// media counts against alive, speed counts against filter-passed.
