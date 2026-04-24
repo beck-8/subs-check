@@ -48,25 +48,32 @@ type aliveResult struct {
 }
 
 // ProxyChecker 处理代理检测的主要结构体
+// Per-stage counts live on package-level atomics (Progress / Available /
+// MediaDone / FilterPassed / SpeedDone / SpeedOk) so both the CLI progress
+// UI and the web admin API can read them without plumbing through a pointer.
 type ProxyChecker struct {
 	results    []Result
 	proxyCount int
 	progress   int32 // alive-stage done count; shared with showProgress
 	available  int32 // alive-stage pass count;  shared with showProgress
-
-	// Pipeline stage counters. progress/available above mirror the alive
-	// stage so the existing showProgress goroutine keeps working unchanged;
-	// the three counters below track downstream stages for PhaseResults.
-	mediaDone    int32
-	filterPassed int32
-	speedOk      int32
 }
 
 var Progress atomic.Uint32
 var Available atomic.Uint32
 var ProxyCount atomic.Uint32
 var TotalBytes atomic.Uint64
-var Phase atomic.Uint32 // 0=idle, 1=alive, 2=media, 3=speed
+var Phase atomic.Uint32 // 0=idle, 1=pipeline running
+
+// Pipeline-wide live counters. These are 0 when idle and reflect
+// how many items have cleared each stage during an active run.
+// AliveDone/AliveOk mirror Progress/Available for backward-compat
+// with the single-phase progress UI.
+var (
+	MediaDone    atomic.Uint32 // checkMedia completions (pass-through, never drops)
+	FilterPassed atomic.Uint32 // items that matched the filter and entered speed/collector
+	SpeedDone    atomic.Uint32 // checkSpeed completions (pass + fail)
+	SpeedOk      atomic.Uint32 // checkSpeed passes (also equals collector input when hasSpeedTest)
+)
 
 // PhaseResult 保存单个阶段的最终结果
 type PhaseResult struct {
@@ -277,13 +284,13 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 
 	// Snapshot per-stage results. Totals cascade: alive counts against input,
 	// media counts against alive, speed counts against filter-passed.
-	aliveOk := uint32(atomic.LoadInt32(&pc.available))
-	mediaDone := uint32(atomic.LoadInt32(&pc.mediaDone))
-	filterPassed := uint32(atomic.LoadInt32(&pc.filterPassed))
+	aliveOk := Available.Load()
+	mediaDone := MediaDone.Load()
+	filterPassed := FilterPassed.Load()
 	SavePhaseResult(1, aliveOk, uint32(total))
 	SavePhaseResult(2, mediaDone, aliveOk)
 	if hasSpeedTest {
-		SavePhaseResult(3, uint32(atomic.LoadInt32(&pc.speedOk)), filterPassed)
+		SavePhaseResult(3, SpeedOk.Load(), filterPassed)
 	}
 
 	// Flatten in subscription order, dropping empty slots.
@@ -399,11 +406,11 @@ func (pc *ProxyChecker) startMediaWorkers(
 			defer wg.Done()
 			for entry := range in {
 				res := pc.checkMedia(entry.a)
-				atomic.AddInt32(&pc.mediaDone, 1)
+				MediaDone.Add(1)
 				if res == nil || !MatchesFilter(*res, patterns) {
 					continue
 				}
-				atomic.AddInt32(&pc.filterPassed, 1)
+				FilterPassed.Add(1)
 				target := speedOut
 				if !hasSpeed {
 					target = collectOut
@@ -429,10 +436,11 @@ func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan 
 			defer wg.Done()
 			for item := range in {
 				updated := pc.checkSpeed(item.r)
+				SpeedDone.Add(1)
 				if updated == nil {
 					continue
 				}
-				atomic.AddInt32(&pc.speedOk, 1)
+				SpeedOk.Add(1)
 				select {
 				case <-ctx.Done():
 					return
@@ -700,6 +708,14 @@ func (pc *ProxyChecker) resetPhaseCounters(count int) {
 	Progress.Store(0)
 	Available.Store(0)
 	ProxyCount.Store(uint32(count))
+
+	// Reset downstream pipeline counters as well so a fresh run doesn't
+	// inherit totals from a previous one (affects both the web admin UI
+	// and the three-line CLI progress renderer).
+	MediaDone.Store(0)
+	FilterPassed.Store(0)
+	SpeedDone.Store(0)
+	SpeedOk.Store(0)
 }
 
 // checkSubscriptionSuccessRate 检查订阅成功率并发出警告
