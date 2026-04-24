@@ -21,13 +21,13 @@ import (
 // initHttpServer 初始化HTTP服务器
 func (app *App) initHttpServer() error {
 	gin.SetMode(gin.ReleaseMode)
-	// Keep stdout uncluttered when the admin page is open: gin's access
-	// log and panic stacks go to the shared temp log file (along with
-	// subs-check's own slog output), so the CLI progress renderer isn't
-	// interrupted by HTTP request lines. gin.Default() snapshots
-	// DefaultWriter / DefaultErrorWriter at call time, so assign before it.
-	gin.DefaultWriter = FileLogger
-	gin.DefaultErrorWriter = FileLogger
+	// Route gin's access log and panic stacks into their own temp file
+	// (same directory as the app log but a separate file). Keeps stdout
+	// clean for the CLI progress renderer and keeps the web UI's log
+	// viewer free of HTTP request noise. gin.Default() snapshots
+	// DefaultWriter / DefaultErrorWriter at call time, so assign first.
+	gin.DefaultWriter = GinFileLogger
+	gin.DefaultErrorWriter = GinFileLogger
 	router := gin.Default()
 
 	saver, err := method.NewLocalSaver()
