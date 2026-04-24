@@ -10,7 +10,6 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -616,61 +615,6 @@ func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 	}
 
 	return res
-}
-
-// showProgress 显示进度条
-func (pc *ProxyChecker) showProgress(done chan bool) {
-	type phaseInfo struct {
-		name       string
-		countLabel string
-	}
-	phases := map[uint32]phaseInfo{
-		1: {"测活", "存活"},
-		2: {"流媒体+重命名", "完成"},
-		3: {"测速", "通过"},
-	}
-	for {
-		select {
-		case <-done:
-			// pauseProgress 已经在阶段结束时把 \r 行收尾换行了,
-			// 这里只在还有未收尾的进度行时才补换行,避免在已经干净的输出后多插一个空行
-			if progressRendered.Load() {
-				fmt.Println()
-			}
-			return
-		default:
-			if progressPaused.Load() {
-				time.Sleep(100 * time.Millisecond)
-				break
-			}
-
-			current := atomic.LoadInt32(&pc.progress)
-			available := atomic.LoadInt32(&pc.available)
-
-			if pc.proxyCount == 0 {
-				time.Sleep(100 * time.Millisecond)
-				break
-			}
-
-			info, ok := phases[Phase.Load()]
-			if !ok {
-				info = phaseInfo{"检测", "可用"}
-			}
-
-			// if 0/0 = NaN ,shoule panic
-			percent := float64(current) / float64(pc.proxyCount) * 100
-			progressRendered.Store(true)
-			fmt.Printf("\r[%s] 进度: [%-45s] %.1f%% (%d/%d) %s: %d",
-				info.name,
-				strings.Repeat("=", int(percent/2))+">",
-				percent,
-				current,
-				pc.proxyCount,
-				info.countLabel,
-				available)
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
 }
 
 // pauseProgress 暂停进度条并换行，确保后续日志不会与进度条混在一行
