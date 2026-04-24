@@ -36,6 +36,7 @@ type Config struct {
 	SubUrlsReTry         int      `yaml:"sub-urls-retry"`
 	SubUrlsRetryInterval int      `yaml:"sub-urls-retry-interval"`
 	SubUrlsTimeout       int      `yaml:"sub-urls-timeout"`
+	SubUrlsConcurrent    int      `yaml:"sub-urls-concurrent"`
 	SubUrlsGetUA         string   `yaml:"sub-urls-get-ua"`
 	SubUrlsRemote        []string `yaml:"sub-urls-remote"`
 	SubUrls              []string `yaml:"sub-urls"`
@@ -90,6 +91,7 @@ var GlobalConfig = &Config{
 	AliveTestUrl:       "http://gstatic.com/generate_204",
 	SubUrlsGetUA:       "clash.meta (https://github.com/beck-8/subs-check)",
 	SubUrlsReTry:       3,
+	SubUrlsConcurrent:  20,
 }
 
 //go:embed config.example.yaml

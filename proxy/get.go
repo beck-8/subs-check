@@ -40,7 +40,15 @@ func GetProxies() ([]map[string]any, error) {
 	}
 
 	var wg sync.WaitGroup
-	concurrentLimit := make(chan struct{}, config.GlobalConfig.Concurrent) // 限制并发数
+	// Subscription-fetch concurrency is decoupled from the alive-check
+	// concurrency: most users want dozens of cheap HTTP fetches in parallel
+	// even when the alive-check pool is tuned large. Falls back to 20 if
+	// the user hasn't set it (zero value).
+	subFetchConcurrency := config.GlobalConfig.SubUrlsConcurrent
+	if subFetchConcurrency <= 0 {
+		subFetchConcurrency = 20
+	}
+	concurrentLimit := make(chan struct{}, subFetchConcurrency) // 限制并发数
 
 	// 按订阅顺序预分配槽位,每个 goroutine 只写自己的下标,无竞争
 	// 这样即便是并发获取,最终合并时仍能保持 subUrls 的顺序(本地在前,远程在后)
