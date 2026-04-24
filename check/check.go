@@ -117,14 +117,14 @@ var activeCancel context.CancelFunc
 // Phases installed after this call are unaffected (per-phase scope,
 // matching the pre-context ForceClose-reset-between-phases behaviour).
 //
-// Emits a warn only when it actually tripped a running pipeline so the
-// user gets one clear signal (SIGHUP / HTTP force-close) without
-// spamming when no check is active.
+// Deliberately silent: emitting a log here would land between the
+// progress renderer's rows and get overwritten by the next frame's
+// cursor-up escape. run() logs the cancellation after pauseProgress
+// has parked the renderer.
 func RequestCancel() {
 	activeCancelMu.Lock()
 	defer activeCancelMu.Unlock()
 	if activeCancel != nil {
-		slog.Warn("收到取消信号，正在停止流水线...")
 		activeCancel()
 	}
 }
@@ -294,6 +294,12 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 
 	if limitHit {
 		slog.Warn(fmt.Sprintf("达到成功数量限制: %d，已停止流水线", config.GlobalConfig.SuccessLimit))
+	} else if ctx.Err() != nil {
+		// External cancel (RequestCancel via SIGHUP / HTTP force-close).
+		// Logged here rather than in RequestCancel because emitting it
+		// while the progress renderer is still drawing would let the
+		// next frame's cursor-up escape overwrite the warn line.
+		slog.Warn("收到取消信号，已停止流水线")
 	}
 
 	// Snapshot per-stage results. Totals cascade: alive counts against input,
