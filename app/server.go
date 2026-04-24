@@ -176,7 +176,7 @@ func (app *App) triggerCheckHandler(c *gin.Context) {
 
 // forceCloseHandler 强制关闭
 func (app *App) forceCloseHandler(c *gin.Context) {
-	check.ForceClose.Store(true)
+	check.RequestCancel()
 	c.JSON(http.StatusOK, gin.H{"message": "已强制关闭"})
 }
 

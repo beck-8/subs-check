@@ -88,9 +88,42 @@ func ResetPhaseResults() {
 	}
 }
 
-var ForceClose atomic.Bool
 var progressPaused atomic.Bool
 var progressRendered atomic.Bool
+
+// activeCancelMu guards activeCancel.
+var activeCancelMu sync.Mutex
+
+// activeCancel cancels the currently running phase. nil when idle or
+// between phases; the per-phase dispatcher installs and clears it.
+var activeCancel context.CancelFunc
+
+// RequestCancel aborts the currently running check phase, if any.
+// Safe to call from any goroutine; no-op when idle.
+// Phases installed after this call are unaffected (per-phase scope,
+// matching the pre-context ForceClose-reset-between-phases behaviour).
+func RequestCancel() {
+	activeCancelMu.Lock()
+	defer activeCancelMu.Unlock()
+	if activeCancel != nil {
+		activeCancel()
+	}
+}
+
+// installPhaseCancel registers cancel as the active phase canceller
+// and returns a cleanup closure that cancels and clears it.
+// Call the returned closure from a defer in the phase function.
+func installPhaseCancel(cancel context.CancelFunc) func() {
+	activeCancelMu.Lock()
+	activeCancel = cancel
+	activeCancelMu.Unlock()
+	return func() {
+		activeCancelMu.Lock()
+		activeCancel = nil
+		activeCancelMu.Unlock()
+		cancel()
+	}
+}
 
 var Bucket *ratelimit.Bucket
 
@@ -112,7 +145,6 @@ func effectiveConcurrency(phaseConcurrency, fallback, itemCount int) int {
 // Check 执行代理检测的主函数
 func Check() ([]Result, error) {
 	proxyutils.ResetRenameCounter()
-	ForceClose.Store(false)
 
 	ProxyCount.Store(0)
 	Available.Store(0)
@@ -244,6 +276,11 @@ func (pc *ProxyChecker) runAlivePhase(proxies []map[string]any, concurrency int,
 	var wg sync.WaitGroup
 	tasks := make(chan aliveTask, 1)
 
+	// Per-phase cancellation scope. RequestCancel only affects the
+	// currently installed phase; later phases start with a fresh context.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer installPhaseCancel(cancel)()
+
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func() {
@@ -264,7 +301,7 @@ func (pc *ProxyChecker) runAlivePhase(proxies []map[string]any, concurrency int,
 				slog.Warn(fmt.Sprintf("达到存活成功数量限制: %d，停止派发", config.GlobalConfig.SuccessLimit))
 				break
 			}
-			if ForceClose.Load() {
+			if ctx.Err() != nil {
 				slog.Warn("收到强制关闭信号，停止派发任务")
 				break
 			}
@@ -287,7 +324,7 @@ func (pc *ProxyChecker) runAlivePhase(proxies []map[string]any, concurrency int,
 // runSpeedPhase 执行测速阶段。
 // 入参是已经通过 filter 的 Result 集合。
 // 通过 min-speed 的节点填充 Result.Speed;未通过的节点被丢弃。
-// ForceClose 或 SuccessLimit 时未测速的节点都直接丢弃,
+// 收到取消信号或 SuccessLimit 时未测速的节点都直接丢弃,
 // 避免和已测速节点混在一起造成"有的有速度标签有的没有"的乱象。
 // 采用分槽法保序:worker 写入预分配的固定下标,最终按 in 输入顺序 flatten。
 func (pc *ProxyChecker) runSpeedPhase(in []Result, concurrency int) []Result {
@@ -298,6 +335,9 @@ func (pc *ProxyChecker) runSpeedPhase(in []Result, concurrency int) []Result {
 	out := make([]*Result, len(in))
 	var wg sync.WaitGroup
 	tasks := make(chan speedTask, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer installPhaseCancel(cancel)()
 
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
@@ -319,7 +359,7 @@ func (pc *ProxyChecker) runSpeedPhase(in []Result, concurrency int) []Result {
 				slog.Warn(fmt.Sprintf("达到测速成功数量限制: %d，停止派发", config.GlobalConfig.SuccessLimit))
 				break
 			}
-			if ForceClose.Load() {
+			if ctx.Err() != nil {
 				slog.Warn("收到强制关闭信号，停止派发测速任务，未测速节点将丢弃")
 				break
 			}
@@ -341,7 +381,7 @@ func (pc *ProxyChecker) runSpeedPhase(in []Result, concurrency int) []Result {
 
 // runMediaPhase 执行流媒体检测 + 国家查询阶段。
 // 不会修改 proxy["name"];检测结果写入 Result 的结构化字段。
-// ForceClose 时未派发的节点直接丢弃,只输出已完成检测的节点,
+// 收到取消信号时未派发的节点直接丢弃,只输出已完成检测的节点,
 // 避免和已检测节点混在一起造成"有的有标签有的没有"的乱象。
 // 采用分槽法保序:worker 写入预分配的固定下标,最终按 alive 输入顺序 flatten。
 func (pc *ProxyChecker) runMediaPhase(alive []aliveResult, concurrency int) []Result {
@@ -352,6 +392,9 @@ func (pc *ProxyChecker) runMediaPhase(alive []aliveResult, concurrency int) []Re
 	out := make([]*Result, len(alive))
 	var wg sync.WaitGroup
 	tasks := make(chan mediaTask, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer installPhaseCancel(cancel)()
 
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
@@ -366,7 +409,7 @@ func (pc *ProxyChecker) runMediaPhase(alive []aliveResult, concurrency int) []Re
 
 	go func() {
 		for i, a := range alive {
-			if ForceClose.Load() {
+			if ctx.Err() != nil {
 				slog.Warn("收到强制关闭信号，停止派发流媒体任务，未检测节点将丢弃")
 				break
 			}
@@ -637,7 +680,7 @@ func (pc *ProxyChecker) incrementAvailable() {
 }
 
 func (pc *ProxyChecker) resetPhaseCounters(count int) {
-	ForceClose.Store(false)
+	// Cancellation is scoped per-phase via installPhaseCancel, no reset needed here.
 	pc.proxyCount = count
 	atomic.StoreInt32(&pc.progress, 0)
 	atomic.StoreInt32(&pc.available, 0)
