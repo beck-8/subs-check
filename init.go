@@ -10,7 +10,6 @@ import (
 	"github.com/beck-8/subs-check/app"
 	"github.com/lmittmann/tint"
 	mihomoLog "github.com/metacubex/mihomo/log"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var Version = "dev"
@@ -29,14 +28,6 @@ func init() {
 	// 获取日志级别
 	logLevel := getLogLevel()
 
-	// 配置日志文件
-	fileLogger := &lumberjack.Logger{
-		Filename:   app.TempLog(),
-		MaxSize:    10,
-		MaxBackups: 3,
-		MaxAge:     7,
-	}
-
 	// 创建两个单独的handler
 	// 1. 终端输出 - 带颜色
 	consoleHandler := tint.NewHandler(os.Stdout, &tint.Options{
@@ -44,8 +35,8 @@ func init() {
 		TimeFormat: "2006-01-02 15:04:05",
 	})
 
-	// 2. 文件输出 - 不带颜色
-	fileHandler := tint.NewHandler(fileLogger, &tint.Options{
+	// 2. 文件输出 - 不带颜色; 与 gin 共用 app.FileLogger,所有日志集中一处
+	fileHandler := tint.NewHandler(app.FileLogger, &tint.Options{
 		Level:      logLevel,
 		TimeFormat: "2006-01-02 15:04:05",
 		NoColor:    true, // 禁用颜色
