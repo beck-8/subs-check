@@ -245,11 +245,11 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	go pipelineDispatch(ctx, proxies, aliveIn)
 
 	// Alive workers
-	aliveWg := pc.startAliveWorkers(ctx, aliveConcurrency, aliveIn, mediaIn)
+	aliveWg := pc.startAliveWorkers(aliveConcurrency, aliveIn, mediaIn)
 	go func() { aliveWg.Wait(); close(mediaIn) }()
 
 	// Media workers (filter runs inline on each passing item)
-	mediaWg := pc.startMediaWorkers(ctx, mediaConcurrency, mediaIn, speedIn, collectIn, hasSpeedTest, patterns)
+	mediaWg := pc.startMediaWorkers(mediaConcurrency, mediaIn, speedIn, collectIn, hasSpeedTest, patterns)
 	go func() {
 		mediaWg.Wait()
 		close(speedIn)
@@ -260,7 +260,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 
 	// Speed workers (optional)
 	if hasSpeedTest {
-		speedWg := pc.startSpeedWorkers(ctx, speedConcurrency, speedIn, collectIn)
+		speedWg := pc.startSpeedWorkers(speedConcurrency, speedIn, collectIn)
 		go func() { speedWg.Wait(); close(collectIn) }()
 	}
 
@@ -368,31 +368,25 @@ func pipelineDispatch(ctx context.Context, proxies []map[string]any, out chan<- 
 }
 
 // startAliveWorkers spawns n alive-check workers.
-// Surviving items are forwarded to out with idx preserved.
-// pc.progress / pc.available are updated here so showProgress keeps working.
-func (pc *ProxyChecker) startAliveWorkers(ctx context.Context, n int, in <-chan aliveTask, out chan<- mediaEntry) *sync.WaitGroup {
+// Classic drain-until-close pipeline pattern: workers read from `in` until
+// the dispatcher closes it, forward every surviving item unconditionally.
+// Cancellation flows through the *dispatcher* only — once an item is in
+// the pipeline it gets to its destination so items already classified as
+// usable are never thrown away mid-flight.
+func (pc *ProxyChecker) startAliveWorkers(n int, in <-chan aliveTask, out chan<- mediaEntry) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for t := range in {
-				// Bail early if cancelled so queued tasks don't waste work and
-				// don't leak past the SuccessLimit overshoot window.
-				if ctx.Err() != nil {
-					return
-				}
 				r := pc.checkAlive(t.proxy)
 				pc.incrementProgress()
 				if r == nil {
 					continue
 				}
 				pc.incrementAvailable()
-				select {
-				case <-ctx.Done():
-					return
-				case out <- mediaEntry{idx: t.idx, a: *r}:
-				}
+				out <- mediaEntry{idx: t.idx, a: *r}
 			}
 		}()
 	}
@@ -402,8 +396,8 @@ func (pc *ProxyChecker) startAliveWorkers(ctx context.Context, n int, in <-chan 
 // startMediaWorkers spawns n media-check workers.
 // checkMedia always produces a Result; the worker applies the filter inline
 // and forwards passing items to speedOut (hasSpeed) or collectOut (!hasSpeed).
+// Drain-until-close: see startAliveWorkers comment.
 func (pc *ProxyChecker) startMediaWorkers(
-	ctx context.Context,
 	n int,
 	in <-chan mediaEntry,
 	speedOut, collectOut chan<- pipelineItem,
@@ -416,23 +410,16 @@ func (pc *ProxyChecker) startMediaWorkers(
 		go func() {
 			defer wg.Done()
 			for entry := range in {
-				if ctx.Err() != nil {
-					return
-				}
 				res := pc.checkMedia(entry.a)
 				MediaDone.Add(1)
 				if res == nil || !MatchesFilter(*res, patterns) {
 					continue
 				}
 				FilterPassed.Add(1)
-				target := speedOut
-				if !hasSpeed {
-					target = collectOut
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case target <- pipelineItem{idx: entry.idx, r: *res}:
+				if hasSpeed {
+					speedOut <- pipelineItem{idx: entry.idx, r: *res}
+				} else {
+					collectOut <- pipelineItem{idx: entry.idx, r: *res}
 				}
 			}
 		}()
@@ -442,27 +429,21 @@ func (pc *ProxyChecker) startMediaWorkers(
 
 // startSpeedWorkers spawns n speed-test workers.
 // Items passing min-speed are forwarded; failures and sub-threshold are dropped.
-func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan pipelineItem, out chan<- pipelineItem) *sync.WaitGroup {
+// Drain-until-close: see startAliveWorkers comment.
+func (pc *ProxyChecker) startSpeedWorkers(n int, in <-chan pipelineItem, out chan<- pipelineItem) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for item := range in {
-				if ctx.Err() != nil {
-					return
-				}
 				updated := pc.checkSpeed(item.r)
 				SpeedDone.Add(1)
 				if updated == nil {
 					continue
 				}
 				SpeedOk.Add(1)
-				select {
-				case <-ctx.Done():
-					return
-				case out <- pipelineItem{idx: item.idx, r: *updated}:
-				}
+				out <- pipelineItem{idx: item.idx, r: *updated}
 			}
 		}()
 	}
