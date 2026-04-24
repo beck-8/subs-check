@@ -109,7 +109,7 @@ func (pc *ProxyChecker) renderFrame() {
 	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测活", aliveDone, aliveTotal, "存活", aliveOk, false))
 
 	// line 2: media + inline filter outcome
-	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("媒体", mediaDone, aliveOk, "过滤", filterPass, false))
+	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("媒体", mediaDone, aliveOk, "通过", filterPass, false))
 
 	// line 3: speed (when enabled) or a summary placeholder
 	if hasSpeed {
@@ -162,12 +162,12 @@ func (pc *ProxyChecker) formatPipelineOneLine() string {
 	speedOk := SpeedOk.Load()
 
 	if hasSpeed {
-		return fmt.Sprintf("流水线: 测活 %d/%d (存活:%d) | 媒体 %d/%d (过滤:%d) | 测速 通过:%d",
+		return fmt.Sprintf("流水线: 测活 %d/%d (存活:%d) | 媒体 %d/%d (通过:%d) | 测速 通过:%d",
 			aliveDone, aliveTotal, aliveOk,
 			mediaDone, aliveOk, filterPass,
 			speedOk)
 	}
-	return fmt.Sprintf("流水线: 测活 %d/%d (存活:%d) | 媒体 %d/%d (过滤:%d)",
+	return fmt.Sprintf("流水线: 测活 %d/%d (存活:%d) | 媒体 %d/%d (通过:%d)",
 		aliveDone, aliveTotal, aliveOk,
 		mediaDone, aliveOk, filterPass)
 }

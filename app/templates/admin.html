@@ -943,8 +943,8 @@
             dom.phaseSteps.style.display = 'flex';
             const rows = [
                 { idx: 1, label: '存活', pass: p.alivePass,  total: p.total },
-                { idx: 2, label: '过滤', pass: p.filterPass, total: p.alivePass },
-                { idx: 3, label: hasSpeed ? '通过' : '通过',
+                { idx: 2, label: '通过', pass: p.filterPass, total: p.alivePass },
+                { idx: 3, label: '通过',
                           pass:  hasSpeed ? p.speedPass  : p.filterPass,
                           total: hasSpeed ? p.filterPass : p.alivePass },
             ];
