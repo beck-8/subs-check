@@ -116,10 +116,15 @@ var activeCancel context.CancelFunc
 // Safe to call from any goroutine; no-op when idle.
 // Phases installed after this call are unaffected (per-phase scope,
 // matching the pre-context ForceClose-reset-between-phases behaviour).
+//
+// Emits a warn only when it actually tripped a running pipeline so the
+// user gets one clear signal (SIGHUP / HTTP force-close) without
+// spamming when no check is active.
 func RequestCancel() {
 	activeCancelMu.Lock()
 	defer activeCancelMu.Unlock()
 	if activeCancel != nil {
+		slog.Warn("收到取消信号，正在停止流水线...")
 		activeCancel()
 	}
 }
