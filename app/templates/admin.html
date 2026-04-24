@@ -31,26 +31,40 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        /* 主内容行等高 */
+        /* 主内容行 — 两列 card 等高。卡片用显式 vh-calc 高度锚定,内部再用
+           flex 把 logs / editor 撑满剩余空间,避免任何一列的"自然高度"反
+           过来拉扯另一列导致空白。 */
         .main-row { display: flex; flex-wrap: wrap; }
         .main-row > [class*="col-"] { display: flex; }
         .main-row .card { display: flex; flex-direction: column; width: 100%; }
-        .main-row .card > .card-body { flex: 1 1 auto; overflow: hidden; }
+        /* card-body 成为 flex column 容器,让 logs-container / editor 可以
+           flex:1 填满剩余空间(扣除同卡内的 header 和 progress-section)。 */
+        .main-row .card > .card-body {
+            flex: 1 1 auto;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
 
-        /* 编辑器样式 - 填满卡片剩余空间 */
+        /* 编辑器样式 - flex:1 填满 card-body 剩余空间 */
         #editor {
-            height: 100%;
-            min-height: 300px;
+            flex: 1 1 auto;
+            min-height: 0;
             border: none;
             margin-bottom: 0;
         }
 
-        .editor-wrapper { position: relative; height: 100%; }
+        .editor-wrapper {
+            position: relative;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
 
-        /* 日志容器样式 - 填满卡片剩余空间 */
+        /* 日志容器样式 - flex:1 填满 card-body 剩余空间 */
         .logs-container {
-            height: 100%;
-            min-height: 250px;
+            flex: 1 1 auto;
+            min-height: 0;
             overflow-y: auto;
             background-color: #1e1e2e;
             padding: 14px;
@@ -63,17 +77,30 @@
             border-radius: 0;
         }
 
-        /* 大屏时给左侧日志区一个合理的高度，右侧编辑器通过flex自动对齐 */
+        /* 桌面: 两列 card 锁死到 vh-calc,同等高度,内部 flex 自分配。
+           这套数跟老 logs-container 的 calc(100vh-440px) 接近(减 300 后
+           再减 header ~36 + progress ~90 ≈ vh-426),视觉上差不多。 */
         @media (min-width: 992px) {
-            .logs-container { height: calc(100vh - 440px); }
+            .main-row .card {
+                height: calc(100vh - 300px);
+                min-height: 400px;
+            }
         }
 
-        /* 响应式调整 */
+        @media (min-width: 1600px) {
+            .main-row .card {
+                height: calc(100vh - 350px);
+            }
+        }
+
+        /* 响应式调整: 窄屏 block 堆叠没有 flex 父容器,直接给 editor/logs
+           显式高度,不靠 flex。 */
         @media (max-width: 991px) {
             body { padding: 12px; }
             .main-row { display: block; }
-            #editor { height: calc(100vh - 285px); }
-            .logs-container { height: calc(100vh - 390px); }
+            .main-row .card { height: auto; }
+            #editor { flex: none; height: calc(100vh - 285px); }
+            .logs-container { flex: none; height: calc(100vh - 390px); }
             .card-header { padding: 0.5rem 0.75rem; }
             .card-body { padding: 0.75rem; }
             .card { margin-bottom: 15px; }
@@ -81,8 +108,8 @@
 
         @media (max-width: 768px) {
             body { padding: 8px; }
-            #editor { height: 420px; }
-            .logs-container { height: 350px; }
+            #editor { flex: none; height: 420px; }
+            .logs-container { flex: none; height: 350px; }
             .status-item { margin-bottom: 8px; }
             .config-path {
                 max-width: 100%;
@@ -93,10 +120,6 @@
             .card { margin-bottom: 12px; }
             .progress-section { padding: 10px; }
             .phase-steps { flex-wrap: wrap; gap: 6px; }
-        }
-
-        @media (min-width: 1600px) {
-            .logs-container { height: calc(100vh - 490px); }
         }
 
         /* 卡片样式 */
@@ -939,24 +962,26 @@
         // 更新状态
         // Pipeline stages run concurrently, so rows stay "active" with live counts.
         // `done` counts items that finished the stage; `pass` counts items that moved on.
-        // The speed row is hidden when speed testing is off — in that mode the media
-        // row already reflects the final pipeline output.
+        // When speed testing is off, the speed row stays visible but inactive with an
+        // empty counter — matching the legacy "grayed, no data" look rather than
+        // hiding the row outright (which shifted the layout).
         function updatePipelineSteps(p, hasSpeed) {
             dom.phaseSteps.style.display = 'flex';
-            phaseStepEls[3].style.display = hasSpeed ? '' : 'none';
             const rows = [
-                { idx: 1, label: '存活', pass: p.alivePass,  total: p.total },
-                { idx: 2, label: '通过', pass: p.filterPass, total: p.alivePass },
+                { idx: 1, label: '存活', pass: p.alivePass,  total: p.total, active: true },
+                { idx: 2, label: '通过', pass: p.filterPass, total: p.alivePass, active: true },
+                { idx: 3, label: '通过', pass: p.speedPass, total: p.filterPass, active: hasSpeed },
             ];
-            if (hasSpeed) {
-                rows.push({ idx: 3, label: '通过', pass: p.speedPass, total: p.filterPass });
-            }
             for (const r of rows) {
                 const step = phaseStepEls[r.idx];
                 const count = phaseCountEls[r.idx];
                 step.classList.remove('active', 'done');
-                step.classList.add('active');
-                count.textContent = r.label + ': ' + r.pass + '/' + r.total;
+                if (r.active) {
+                    step.classList.add('active');
+                    count.textContent = r.label + ': ' + r.pass + '/' + r.total;
+                } else {
+                    count.textContent = '';
+                }
             }
         }
 
