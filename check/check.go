@@ -370,6 +370,11 @@ func (pc *ProxyChecker) startAliveWorkers(ctx context.Context, n int, in <-chan 
 		go func() {
 			defer wg.Done()
 			for t := range in {
+				// Bail early if cancelled so queued tasks don't waste work and
+				// don't leak past the SuccessLimit overshoot window.
+				if ctx.Err() != nil {
+					return
+				}
 				r := pc.checkAlive(t.proxy)
 				pc.incrementProgress()
 				if r == nil {
@@ -404,6 +409,9 @@ func (pc *ProxyChecker) startMediaWorkers(
 		go func() {
 			defer wg.Done()
 			for entry := range in {
+				if ctx.Err() != nil {
+					return
+				}
 				res := pc.checkMedia(entry.a)
 				MediaDone.Add(1)
 				if res == nil || !MatchesFilter(*res, patterns) {
@@ -434,6 +442,9 @@ func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan 
 		go func() {
 			defer wg.Done()
 			for item := range in {
+				if ctx.Err() != nil {
+					return
+				}
 				updated := pc.checkSpeed(item.r)
 				SpeedDone.Add(1)
 				if updated == nil {
