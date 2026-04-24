@@ -937,6 +937,48 @@
         }
 
         // 更新状态
+        // Pipeline stages run concurrently, so all three rows stay "active" with live counts.
+        // `done` counts items that finished the stage; `pass` counts items that moved on to the next.
+        function updatePipelineSteps(p, hasSpeed) {
+            dom.phaseSteps.style.display = 'flex';
+            const rows = [
+                { idx: 1, label: '存活', pass: p.alivePass,  total: p.total },
+                { idx: 2, label: '过滤', pass: p.filterPass, total: p.alivePass },
+                { idx: 3, label: hasSpeed ? '通过' : '通过',
+                          pass:  hasSpeed ? p.speedPass  : p.filterPass,
+                          total: hasSpeed ? p.filterPass : p.alivePass },
+            ];
+            for (const r of rows) {
+                const step = phaseStepEls[r.idx];
+                const count = phaseCountEls[r.idx];
+                step.classList.remove('active', 'done');
+                step.classList.add('active');
+                count.textContent = r.label + ': ' + r.pass + '/' + r.total;
+            }
+        }
+
+        function updatePipelineBar(p, hasSpeed) {
+            const total = p.total;
+            const processed = p.aliveDone;                         // how far through input
+            const success = hasSpeed ? p.speedPass : p.filterPass; // end-to-end pass count
+
+            const pctProcessed = total > 0 ? (processed / total * 100).toFixed(1) : 0;
+            dom.progressText.textContent = processed + '/' + total;
+            dom.progressPercent.textContent = pctProcessed + '%';
+            dom.progressBarTotal.style.width = pctProcessed + '%';
+
+            const pctSuccess = total > 0 ? (success / total * 100).toFixed(1) : 0;
+            dom.processPercent.textContent = pctSuccess + '%';
+            dom.progressBarSuccess.style.width = pctSuccess + '%';
+
+            if (dom.successLabel && dom.successText) {
+                dom.successLabel.childNodes[0].textContent = '通过: ';
+                dom.successText.innerHTML = success > 0
+                    ? '<span class="success-highlight">' + success + '</span>/' + total
+                    : success + '/' + total;
+            }
+        }
+
         function updateStatus() {
             fetch('/api/status', {
                 headers: addApiKeyHeader()
@@ -950,10 +992,15 @@
                     if (data.checking) {
                         dom.statusContainer.className = 'text-primary';
                         dom.statusIcon.className = 'bi bi-arrow-repeat me-1 rotate-animation';
-                        const phaseName = (data.phase && PHASE_LABELS[data.phase]) ? PHASE_LABELS[data.phase].name : '检测';
-                        dom.statusText.textContent = '正在' + phaseName + '中...';
+                        dom.statusText.textContent = '正在检测中...';
 
-                        updateProgressBar(data.proxyCount, data.progress, data.available, data.phase, data.phaseResults);
+                        if (data.pipeline) {
+                            updatePipelineBar(data.pipeline, !!data.hasSpeedTest);
+                            updatePipelineSteps(data.pipeline, !!data.hasSpeedTest);
+                        } else {
+                            // legacy fallback (older server)
+                            updateProgressBar(data.proxyCount, data.progress, data.available, data.phase, data.phaseResults);
+                        }
                     } else {
                         dom.statusContainer.className = 'text-success';
                         dom.statusIcon.className = 'bi bi-check-circle me-1';

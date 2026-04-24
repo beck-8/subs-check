@@ -158,13 +158,28 @@ func (app *App) getStatus(c *gin.Context) {
 	for i := 1; i <= 3; i++ {
 		phaseResults[fmt.Sprintf("%d", i)] = check.GetPhaseResult(i)
 	}
+	// Pipeline stages run concurrently, so a single `phase` value is no
+	// longer expressive enough. Emit a flat pipeline snapshot alongside
+	// the legacy fields; the admin UI renders from `pipeline` when present
+	// and falls back to `phase` / `progress` / `available` otherwise.
+	pipeline := gin.H{
+		"total":      check.ProxyCount.Load(),
+		"aliveDone":  check.Progress.Load(),
+		"alivePass":  check.Available.Load(),
+		"mediaDone":  check.MediaDone.Load(),
+		"filterPass": check.FilterPassed.Load(),
+		"speedDone":  check.SpeedDone.Load(),
+		"speedPass":  check.SpeedOk.Load(),
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"checking":     app.checking.Load(),
-		"proxyCount":   check.ProxyCount.Load(),
-		"available":    check.Available.Load(),
-		"progress":     check.Progress.Load(),
-		"phase":        check.Phase.Load(),
-		"phaseResults": phaseResults,
+		"checking":      app.checking.Load(),
+		"proxyCount":    check.ProxyCount.Load(),
+		"available":     check.Available.Load(),
+		"progress":      check.Progress.Load(),
+		"phase":         check.Phase.Load(),
+		"phaseResults":  phaseResults,
+		"pipeline":      pipeline,
+		"hasSpeedTest":  config.GlobalConfig.SpeedTestUrl != "",
 	})
 }
 
