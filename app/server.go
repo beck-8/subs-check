@@ -1,13 +1,15 @@
 package app
 
 import (
-	"bufio"
+	"bytes"
 	"crypto/subtle"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/beck-8/subs-check/check"
@@ -224,35 +226,69 @@ func (app *App) getVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"version": app.version})
 }
 
+// ReadLastNLines returns up to n trailing lines of filePath in file order.
+// Reads the file backwards in chunks so the scan cost is O(n) instead of
+// O(file size) — important because lumberjack lets the log reach 10MB and
+// the admin UI polls /api/logs every 10 seconds.
 func ReadLastNLines(filePath string, n int) ([]string, error) {
-	file, err := os.Open(filePath)
+	if n <= 0 {
+		return nil, nil
+	}
+	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer f.Close()
 
-	scanner := bufio.NewScanner(file)
-	ring := make([]string, n)
-	count := 0
-
-	// 使用环形缓冲区读取
-	for scanner.Scan() {
-		ring[count%n] = scanner.Text()
-		count++
-	}
-	if err := scanner.Err(); err != nil {
+	size, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
 		return nil, err
 	}
-
-	// 处理结果
-	if count <= n {
-		return ring[:count], nil
+	if size == 0 {
+		return nil, nil
 	}
 
-	// 调整顺序，从最旧到最新
-	start := count % n
-	result := append(ring[start:], ring[:start]...)
-	return result, nil
+	// Walk backwards, stopping once we have strictly more than n newlines
+	// in hand: that guarantees the buffer contains all of the last n
+	// complete lines plus at least one partial/boundary line before them,
+	// which the final slice discards.
+	const chunkSize int64 = 8192
+	var buf []byte
+	off := size
+	for off > 0 {
+		readSize := chunkSize
+		if off < readSize {
+			readSize = off
+		}
+		off -= readSize
+
+		tmp := make([]byte, readSize)
+		if _, err := f.ReadAt(tmp, off); err != nil && err != io.EOF {
+			return nil, err
+		}
+		buf = append(tmp, buf...)
+
+		if int64(bytes.Count(buf, []byte{'\n'})) > int64(n) {
+			break
+		}
+	}
+
+	// Drop trailing newline(s) so Split doesn't produce a spurious empty
+	// last element (logs always terminate lines with \n).
+	buf = bytes.TrimRight(buf, "\n")
+	if len(buf) == 0 {
+		return nil, nil
+	}
+
+	lines := strings.Split(string(buf), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	// Strip CR for CRLF-terminated logs (bufio.Scanner did this implicitly).
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, "\r")
+	}
+	return lines, nil
 }
 
 func GenerateSimpleKey() string {
