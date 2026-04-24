@@ -33,15 +33,17 @@ func (pc *ProxyChecker) showProgress(done chan bool) {
 	pc.showProgressLog(done)
 }
 
-// showProgressANSI renders three stacked progress lines (alive / media / speed),
-// updating in place. The first frame prints three fresh lines; subsequent
-// frames move the cursor back up three rows and rewrite them.
+// showProgressANSI renders stacked progress lines (alive / media[ / speed]),
+// updating in place. The third line is omitted when speed testing is off —
+// in that mode the media stage already produces the final output, so any
+// third line would just duplicate the filter-pass count.
 func (pc *ProxyChecker) showProgressANSI(done chan bool) {
 	const frameInterval = 200 * time.Millisecond
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
 
 	firstFrame := true
+	var lastRows int
 	for {
 		select {
 		case <-done:
@@ -59,11 +61,10 @@ func (pc *ProxyChecker) showProgressANSI(done chan bool) {
 			if ProxyCount.Load() == 0 {
 				continue
 			}
-			if !firstFrame {
-				// cursor up 3 lines, column 0
-				fmt.Print("\x1b[3A\r")
+			if !firstFrame && lastRows > 0 {
+				fmt.Printf("\x1b[%dA\r", lastRows)
 			}
-			pc.renderFrame()
+			lastRows = pc.renderFrame()
 			firstFrame = false
 			progressRendered.Store(true)
 		}
@@ -91,9 +92,10 @@ func (pc *ProxyChecker) showProgressLog(done chan bool) {
 	}
 }
 
-// renderFrame writes three progress lines. Each line is prefixed by
-// \x1b[2K (erase line) so varying-width numbers don't leave stale chars.
-func (pc *ProxyChecker) renderFrame() {
+// renderFrame writes the progress lines and returns how many were printed
+// (2 without speed test, 3 with). Each line is prefixed by \x1b[2K (erase
+// line) so varying-width numbers don't leave stale chars.
+func (pc *ProxyChecker) renderFrame() int {
 	hasSpeed := config.GlobalConfig.SpeedTestUrl != ""
 	limit := config.GlobalConfig.SuccessLimit
 
@@ -102,23 +104,23 @@ func (pc *ProxyChecker) renderFrame() {
 	aliveOk := Available.Load()
 	mediaDone := MediaDone.Load()
 	filterPass := FilterPassed.Load()
+
+	if !hasSpeed {
+		// Media is the last stage; its filter-pass count is the final result
+		// so the limit marker also lives on this line.
+		limitHit := limit > 0 && int32(filterPass) >= limit
+		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测活", aliveDone, aliveTotal, "存活", aliveOk, false))
+		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("媒体", mediaDone, aliveOk, "通过", filterPass, limitHit))
+		return 2
+	}
+
 	speedDone := SpeedDone.Load()
 	speedOk := SpeedOk.Load()
-
-	// line 1: alive
+	limitHit := limit > 0 && int32(speedOk) >= limit
 	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测活", aliveDone, aliveTotal, "存活", aliveOk, false))
-
-	// line 2: media + inline filter outcome
 	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("媒体", mediaDone, aliveOk, "通过", filterPass, false))
-
-	// line 3: speed (when enabled) or a summary placeholder
-	if hasSpeed {
-		limitHit := limit > 0 && int32(speedOk) >= limit
-		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测速", speedDone, filterPass, "通过", speedOk, limitHit))
-	} else {
-		limitHit := limit > 0 && int32(filterPass) >= limit
-		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("输出", filterPass, aliveOk, "通过", filterPass, limitHit))
-	}
+	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测速", speedDone, filterPass, "通过", speedOk, limitHit))
+	return 3
 }
 
 // formatStageLine renders one progress row:

@@ -937,17 +937,20 @@
         }
 
         // 更新状态
-        // Pipeline stages run concurrently, so all three rows stay "active" with live counts.
-        // `done` counts items that finished the stage; `pass` counts items that moved on to the next.
+        // Pipeline stages run concurrently, so rows stay "active" with live counts.
+        // `done` counts items that finished the stage; `pass` counts items that moved on.
+        // The speed row is hidden when speed testing is off — in that mode the media
+        // row already reflects the final pipeline output.
         function updatePipelineSteps(p, hasSpeed) {
             dom.phaseSteps.style.display = 'flex';
+            phaseStepEls[3].style.display = hasSpeed ? '' : 'none';
             const rows = [
                 { idx: 1, label: '存活', pass: p.alivePass,  total: p.total },
                 { idx: 2, label: '通过', pass: p.filterPass, total: p.alivePass },
-                { idx: 3, label: '通过',
-                          pass:  hasSpeed ? p.speedPass  : p.filterPass,
-                          total: hasSpeed ? p.filterPass : p.alivePass },
             ];
+            if (hasSpeed) {
+                rows.push({ idx: 3, label: '通过', pass: p.speedPass, total: p.filterPass });
+            }
             for (const r of rows) {
                 const step = phaseStepEls[r.idx];
                 const count = phaseCountEls[r.idx];
