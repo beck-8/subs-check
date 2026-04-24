@@ -218,7 +218,12 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 		go pc.showProgress(done)
 	}
 
-	hasSpeedTest := config.GlobalConfig.SpeedTestUrl != ""
+	// Capture the speed-test URL once at pipeline start so the current run
+	// stays consistent even if the user edits config mid-check. Otherwise
+	// flipping the URL to empty mid-run would cause every in-flight speed
+	// request to fail (no host) and silently drop nearly all results.
+	speedTestURL := config.GlobalConfig.SpeedTestUrl
+	hasSpeedTest := speedTestURL != ""
 	total := len(proxies)
 
 	aliveConcurrency := effectiveConcurrency(config.GlobalConfig.Concurrent, config.GlobalConfig.Concurrent, total)
@@ -268,7 +273,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 
 	// Speed workers (optional)
 	if hasSpeedTest {
-		speedWg := pc.startSpeedWorkers(ctx, speedConcurrency, speedIn, collectIn)
+		speedWg := pc.startSpeedWorkers(ctx, speedConcurrency, speedIn, collectIn, speedTestURL)
 		go func() { speedWg.Wait(); close(collectIn) }()
 	}
 
@@ -473,7 +478,11 @@ func (pc *ProxyChecker) startMediaWorkers(
 // the final hop, even if cancel fires between SpeedOk.Add and the send.
 // ctx.Err is only checked at the top of the loop to avoid starting a
 // fresh ~10s speed test once we've already tripped SuccessLimit.
-func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan pipelineItem, out chan<- pipelineItem) *sync.WaitGroup {
+//
+// speedTestURL is passed through (captured at pipeline start) so the
+// run stays self-consistent even if the user edits SpeedTestUrl in
+// the config file mid-check.
+func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan pipelineItem, out chan<- pipelineItem, speedTestURL string) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
@@ -483,7 +492,7 @@ func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan 
 				if ctx.Err() != nil {
 					return
 				}
-				updated := pc.checkSpeed(item.r)
+				updated := pc.checkSpeed(item.r, speedTestURL)
 				SpeedDone.Add(1)
 				if updated == nil {
 					continue
@@ -519,7 +528,9 @@ func (pc *ProxyChecker) checkAlive(proxy map[string]any) *aliveResult {
 // checkSpeed 对已有的 Result 执行测速。
 // 通过 min-speed 的节点填充 r.Speed 并返回;未通过的返回 nil。
 // 不修改 proxy["name"]。
-func (pc *ProxyChecker) checkSpeed(r Result) *Result {
+// speedTestURL 由调用方在流水线启动时冻结的快照,避免 config 热重载
+// 把 URL 置空后把当前这一轮的所有测速请求打穿(no host error)。
+func (pc *ProxyChecker) checkSpeed(r Result, speedTestURL string) *Result {
 	if os.Getenv("SUB_CHECK_SKIP") != "" {
 		r.Speed = 0
 		return &r
@@ -531,7 +542,7 @@ func (pc *ProxyChecker) checkSpeed(r Result) *Result {
 	}
 	defer httpClient.Close()
 
-	speed, _, err := platform.CheckSpeed(httpClient.Client, Bucket, httpClient.BytesRead)
+	speed, _, err := platform.CheckSpeed(httpClient.Client, Bucket, httpClient.BytesRead, speedTestURL)
 	if err != nil || speed < config.GlobalConfig.MinSpeed {
 		return nil
 	}

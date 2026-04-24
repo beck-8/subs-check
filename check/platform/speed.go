@@ -39,7 +39,11 @@ func (r *networkLimitedReader) Read(p []byte) (n int, err error) {
 	return r.reader.Read(p)
 }
 
-func CheckSpeed(httpClient *http.Client, bucket *ratelimit.Bucket, bytesCounter *uint64) (int, int64, error) {
+// CheckSpeed downloads speedTestURL through httpClient and returns the measured
+// throughput. The URL is passed in explicitly (rather than read from
+// config.GlobalConfig) so a run captured at pipeline start stays consistent
+// even if the user edits SpeedTestUrl mid-check.
+func CheckSpeed(httpClient *http.Client, bucket *ratelimit.Bucket, bytesCounter *uint64, speedTestURL string) (int, int64, error) {
 	// 注意：速度限制在网络层（statsConn）实现，大小限制在应用层基于网络字节计数器实现
 	// - 速度限制：通过 bucket 在 statsConn 中实现（网络层）
 	// - 大小限制：通过 networkLimitedReader 基于网络字节计数器实现（应用层，但限制网络流量）
@@ -52,7 +56,7 @@ func CheckSpeed(httpClient *http.Client, bucket *ratelimit.Bucket, bytesCounter 
 		Transport: httpClient.Transport,
 	}
 
-	req, err := http.NewRequest("GET", config.GlobalConfig.SpeedTestUrl, nil)
+	req, err := http.NewRequest("GET", speedTestURL, nil)
 	if err != nil {
 		return 0, 0, err
 	}
