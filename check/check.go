@@ -387,15 +387,11 @@ func (pc *ProxyChecker) startAliveWorkers(ctx context.Context, n int, in <-chan 
 				if r == nil {
 					continue
 				}
-				// Count items that successfully reached the next stage; items
-				// lost to cancel (select picks ctx.Done) are not counted, so
-				// the alive-pass figure never exceeds what the pipeline
-				// actually produced downstream.
+				pc.incrementAvailable()
 				select {
 				case <-ctx.Done():
 					return
 				case out <- mediaEntry{idx: t.idx, a: *r}:
-					pc.incrementAvailable()
 				}
 			}
 		}()
@@ -428,18 +424,15 @@ func (pc *ProxyChecker) startMediaWorkers(
 				if res == nil || !MatchesFilter(*res, patterns) {
 					continue
 				}
+				FilterPassed.Add(1)
 				target := speedOut
 				if !hasSpeed {
 					target = collectOut
 				}
-				// FilterPassed counts items that both match the filter *and*
-				// made it into the next stage (not dropped by cancel race),
-				// keeping the figure consistent with actual throughput.
 				select {
 				case <-ctx.Done():
 					return
 				case target <- pipelineItem{idx: entry.idx, r: *res}:
-					FilterPassed.Add(1)
 				}
 			}
 		}()
@@ -464,15 +457,11 @@ func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan 
 				if updated == nil {
 					continue
 				}
-				// SpeedOk counts items that passed the speed test *and*
-				// reached the collector, so it equals finalPassed (i.e.
-				// the number of nodes the UI, CLI summary, and saved
-				// all.yaml will all agree on).
+				SpeedOk.Add(1)
 				select {
 				case <-ctx.Done():
 					return
 				case out <- pipelineItem{idx: item.idx, r: *updated}:
-					SpeedOk.Add(1)
 				}
 			}
 		}()
