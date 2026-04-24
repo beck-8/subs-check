@@ -67,28 +67,29 @@ func TestPipeline_PreservesOrder(t *testing.T) {
 }
 
 // TestPipeline_HonorsSuccessLimit verifies that cancel halts the
-// dispatcher once SuccessLimit items have been gathered. The pipeline
-// uses the drain-until-close pattern: items already in the pipeline
-// when cancel fires flow through to the output (no in-flight drops),
-// so we assert the two meaningful invariants — at least `limit` items
-// came out, and strictly fewer than the input was processed (i.e.
-// dispatch was actually stopped).
+// dispatcher once SuccessLimit items have been gathered. Cancellation
+// policy is asymmetric:
+//   - middle stages use a ctx-aware select on send, so queued items and
+//     select-race losers are dropped to avoid wasted downstream work
+//   - the speed→collector send is unconditional, so items already
+//     classified as passing the speed test never get thrown away
 //
-// The exact overshoot depends on how much of the pipeline fills up
-// before the collector trips the limit. Under SUB_CHECK_SKIP the
-// checks are instantaneous so buffers fill fast and overshoot can be
-// large; in production each stage is a network call and overshoot
-// is much smaller.
+// Overshoot bound reflects that asymmetry: up to cap(collectIn) items
+// may have been queued for the collector when cancel fired, and each
+// speed worker in flight may send one more item (unconditional). That
+// gives a ceiling around limit + 2*speed-concurrent, loose enough to
+// stay robust against Go's random select scheduling.
 func TestPipeline_HonorsSuccessLimit(t *testing.T) {
 	t.Setenv("SUB_CHECK_SKIP", "1")
 	const (
-		input = 2000
-		limit = 10
+		input  = 2000
+		limit  = 10
+		speedC = 10
 	)
 	withConfig(t, config.Config{
 		Concurrent:      50,
 		MediaConcurrent: 20,
-		SpeedConcurrent: 10,
+		SpeedConcurrent: speedC,
 		SpeedTestUrl:    "http://example.invalid/dl",
 		SuccessLimit:    limit,
 		MinSpeed:        0,
@@ -103,8 +104,8 @@ func TestPipeline_HonorsSuccessLimit(t *testing.T) {
 		if len(results) < limit {
 			t.Fatalf("expected at least %d results, got %d", limit, len(results))
 		}
-		if len(results) >= input {
-			t.Fatalf("cancellation did not stop dispatch: got %d results from %d inputs", len(results), input)
+		if max := limit + 2*speedC; len(results) > max {
+			t.Fatalf("expected at most %d results (overshoot window), got %d", max, len(results))
 		}
 		if alive := int(Progress.Load()); alive >= input {
 			t.Fatalf("cancellation did not stop dispatch: aliveDone=%d (input=%d)", alive, input)

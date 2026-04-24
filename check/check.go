@@ -245,11 +245,11 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	go pipelineDispatch(ctx, proxies, aliveIn)
 
 	// Alive workers
-	aliveWg := pc.startAliveWorkers(aliveConcurrency, aliveIn, mediaIn)
+	aliveWg := pc.startAliveWorkers(ctx, aliveConcurrency, aliveIn, mediaIn)
 	go func() { aliveWg.Wait(); close(mediaIn) }()
 
 	// Media workers (filter runs inline on each passing item)
-	mediaWg := pc.startMediaWorkers(mediaConcurrency, mediaIn, speedIn, collectIn, hasSpeedTest, patterns)
+	mediaWg := pc.startMediaWorkers(ctx, mediaConcurrency, mediaIn, speedIn, collectIn, hasSpeedTest, patterns)
 	go func() {
 		mediaWg.Wait()
 		close(speedIn)
@@ -260,7 +260,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 
 	// Speed workers (optional)
 	if hasSpeedTest {
-		speedWg := pc.startSpeedWorkers(speedConcurrency, speedIn, collectIn)
+		speedWg := pc.startSpeedWorkers(ctx, speedConcurrency, speedIn, collectIn)
 		go func() { speedWg.Wait(); close(collectIn) }()
 	}
 
@@ -368,25 +368,34 @@ func pipelineDispatch(ctx context.Context, proxies []map[string]any, out chan<- 
 }
 
 // startAliveWorkers spawns n alive-check workers.
-// Classic drain-until-close pipeline pattern: workers read from `in` until
-// the dispatcher closes it, forward every surviving item unconditionally.
-// Cancellation flows through the *dispatcher* only — once an item is in
-// the pipeline it gets to its destination so items already classified as
-// usable are never thrown away mid-flight.
-func (pc *ProxyChecker) startAliveWorkers(n int, in <-chan aliveTask, out chan<- mediaEntry) *sync.WaitGroup {
+// Cancellation policy (middle stage): when cancel fires, workers stop
+// pulling new items from their input queue *and* allow in-flight items
+// to be dropped at the send boundary via a ctx-aware select. This
+// prevents items queued at the time of cancel from triggering wasted
+// work in the downstream media / speed stages.
+// Items already classified as "passed speed" never get dropped — see
+// startSpeedWorkers for the asymmetric policy at the last boundary.
+func (pc *ProxyChecker) startAliveWorkers(ctx context.Context, n int, in <-chan aliveTask, out chan<- mediaEntry) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for t := range in {
+				if ctx.Err() != nil {
+					return
+				}
 				r := pc.checkAlive(t.proxy)
 				pc.incrementProgress()
 				if r == nil {
 					continue
 				}
 				pc.incrementAvailable()
-				out <- mediaEntry{idx: t.idx, a: *r}
+				select {
+				case <-ctx.Done():
+					return
+				case out <- mediaEntry{idx: t.idx, a: *r}:
+				}
 			}
 		}()
 	}
@@ -396,8 +405,13 @@ func (pc *ProxyChecker) startAliveWorkers(n int, in <-chan aliveTask, out chan<-
 // startMediaWorkers spawns n media-check workers.
 // checkMedia always produces a Result; the worker applies the filter inline
 // and forwards passing items to speedOut (hasSpeed) or collectOut (!hasSpeed).
-// Drain-until-close: see startAliveWorkers comment.
+// Cancellation policy:
+//   - hasSpeed: middle stage, ctx-aware select on speedOut (drops on cancel
+//     race so cancel-dropped items don't waste a ~10s speed test)
+//   - !hasSpeed: last stage, unconditional send to collectOut so items
+//     classified as passing the filter are never dropped at the final hop
 func (pc *ProxyChecker) startMediaWorkers(
+	ctx context.Context,
 	n int,
 	in <-chan mediaEntry,
 	speedOut, collectOut chan<- pipelineItem,
@@ -410,6 +424,9 @@ func (pc *ProxyChecker) startMediaWorkers(
 		go func() {
 			defer wg.Done()
 			for entry := range in {
+				if ctx.Err() != nil {
+					return
+				}
 				res := pc.checkMedia(entry.a)
 				MediaDone.Add(1)
 				if res == nil || !MatchesFilter(*res, patterns) {
@@ -417,8 +434,15 @@ func (pc *ProxyChecker) startMediaWorkers(
 				}
 				FilterPassed.Add(1)
 				if hasSpeed {
-					speedOut <- pipelineItem{idx: entry.idx, r: *res}
+					select {
+					case <-ctx.Done():
+						return
+					case speedOut <- pipelineItem{idx: entry.idx, r: *res}:
+					}
 				} else {
+					// last stage — collector always reads collectIn, so the
+					// unconditional send never blocks; guarantees every
+					// filter-passed item ends up in the output.
 					collectOut <- pipelineItem{idx: entry.idx, r: *res}
 				}
 			}
@@ -428,15 +452,21 @@ func (pc *ProxyChecker) startMediaWorkers(
 }
 
 // startSpeedWorkers spawns n speed-test workers.
-// Items passing min-speed are forwarded; failures and sub-threshold are dropped.
-// Drain-until-close: see startAliveWorkers comment.
-func (pc *ProxyChecker) startSpeedWorkers(n int, in <-chan pipelineItem, out chan<- pipelineItem) *sync.WaitGroup {
+// Last stage before the collector: items that pass min-speed are sent
+// unconditionally so an item classified as "good" is never dropped at
+// the final hop, even if cancel fires between SpeedOk.Add and the send.
+// ctx.Err is only checked at the top of the loop to avoid starting a
+// fresh ~10s speed test once we've already tripped SuccessLimit.
+func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan pipelineItem, out chan<- pipelineItem) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for item := range in {
+				if ctx.Err() != nil {
+					return
+				}
 				updated := pc.checkSpeed(item.r)
 				SpeedDone.Add(1)
 				if updated == nil {
