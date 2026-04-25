@@ -71,11 +71,11 @@ func (pc *ProxyChecker) showProgressANSI(done chan bool) {
 	}
 }
 
-// showProgressLog emits a compact single-line info every 5 seconds so
-// non-tty consumers (pipes, docker logs) get periodic visibility
-// without scroll spam.
+// showProgressLog periodically emits a compact single-line info so
+// non-tty consumers (pipes, docker logs) get visibility into pipeline
+// progress without scroll spam from per-frame writes.
 func (pc *ProxyChecker) showProgressLog(done chan bool) {
-	const interval = 5 * time.Second
+	const interval = 120 * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
