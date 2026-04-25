@@ -47,18 +47,20 @@
             min-height: 0;
         }
 
-        /* 编辑器样式 - flex:1 填满 card-body 剩余空间 */
-        #editor {
-            flex: 1 1 auto;
-            min-height: 0;
-            border: none;
-            margin-bottom: 0;
-        }
-
+        /* editor-wrapper 用 flex 拿 card-body 的剩余高度;#editor 用 absolute
+           充满 wrapper,这样 Monaco 在初始化时能立即测出明确的尺寸,不会因
+           为嵌套 flex 测量时机的问题渲染成空白。 */
         .editor-wrapper {
             position: relative;
             flex: 1 1 auto;
             min-height: 0;
+        }
+
+        #editor {
+            position: absolute;
+            inset: 0;
+            border: none;
+            margin-bottom: 0;
         }
 
         /* 日志容器样式 - flex:1 填满 card-body 剩余空间 */
@@ -93,13 +95,14 @@
             }
         }
 
-        /* 响应式调整: 窄屏 block 堆叠没有 flex 父容器,直接给 editor/logs
-           显式高度,不靠 flex。 */
+        /* 响应式调整: 窄屏 block 堆叠没有 flex 父容器,直接给 editor-wrapper
+           和 logs-container 显式高度,不靠 flex。#editor 还是 absolute 充满
+           wrapper,所以高度落在 wrapper 上而不是 #editor 自己。 */
         @media (max-width: 991px) {
             body { padding: 12px; }
             .main-row { display: block; }
             .main-row .card { height: auto; }
-            #editor { flex: none; height: calc(100vh - 285px); }
+            .editor-wrapper { flex: none; height: calc(100vh - 285px); }
             .logs-container { flex: none; height: calc(100vh - 390px); }
             .card-header { padding: 0.5rem 0.75rem; }
             .card-body { padding: 0.75rem; }
@@ -108,7 +111,7 @@
 
         @media (max-width: 768px) {
             body { padding: 8px; }
-            #editor { flex: none; height: 420px; }
+            .editor-wrapper { flex: none; height: 420px; }
             .logs-container { flex: none; height: 350px; }
             .status-item { margin-bottom: 8px; }
             .config-path {
