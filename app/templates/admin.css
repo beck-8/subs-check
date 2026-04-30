@@ -1,0 +1,385 @@
+:root {
+    --bg-primary: #f0f2f5;
+    --bg-card: #ffffff;
+    --border-color: #e8ecf1;
+    --text-primary: #1a1a2e;
+    --text-secondary: #6c757d;
+    --accent-blue: #4361ee;
+    --accent-green: #2ec4b6;
+    --accent-red: #e63946;
+    --accent-yellow: #f4a261;
+    --accent-cyan: #4cc9f0;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+    --radius: 10px;
+}
+
+body {
+    padding: 20px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* 主内容行 — 两列 card 等高。卡片用显式 vh-calc 高度锚定,内部再用
+    flex 把 logs / editor 撑满剩余空间,避免任何一列的"自然高度"反
+    过来拉扯另一列导致空白。 */
+.main-row { display: flex; flex-wrap: wrap; }
+.main-row > [class*="col-"] { display: flex; }
+.main-row .card { display: flex; flex-direction: column; width: 100%; }
+/* card-body 成为 flex column 容器,让 logs-container / editor 可以
+    flex:1 填满剩余空间(扣除同卡内的 header 和 progress-section)。 */
+.main-row .card > .card-body {
+    flex: 1 1 auto;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* editor-wrapper 用 flex 拿 card-body 的剩余高度;#editor 用 absolute
+    充满 wrapper,这样 Monaco 在初始化时能立即测出明确的尺寸,不会因
+    为嵌套 flex 测量时机的问题渲染成空白。 */
+.editor-wrapper {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+#editor {
+    position: absolute;
+    inset: 0;
+    border: none;
+    margin-bottom: 0;
+}
+
+/* 日志容器样式 - flex:1 填满 card-body 剩余空间 */
+.logs-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    background-color: #1e1e2e;
+    padding: 14px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    border: none;
+    margin-bottom: 0;
+    color: #cdd6f4;
+    border-radius: 0;
+}
+
+/* 桌面: 两列 card 锁死到 vh-calc,同等高度,内部 flex 自分配。
+    这套数跟老 logs-container 的 calc(100vh-440px) 接近(减 300 后
+    再减 header ~36 + progress ~90 ≈ vh-426),视觉上差不多。 */
+@media (min-width: 992px) {
+    .main-row .card {
+        height: calc(100vh - 300px);
+        min-height: 400px;
+    }
+}
+
+@media (min-width: 1600px) {
+    .main-row .card {
+        height: calc(100vh - 350px);
+    }
+}
+
+/* 响应式调整: 窄屏 block 堆叠没有 flex 父容器,直接给 editor-wrapper
+    和 logs-container 显式高度,不靠 flex。#editor 还是 absolute 充满
+    wrapper,所以高度落在 wrapper 上而不是 #editor 自己。 */
+@media (max-width: 991px) {
+    body { padding: 12px; }
+    .main-row { display: block; }
+    .main-row .card { height: auto; }
+    .editor-wrapper { flex: none; height: calc(100vh - 285px); }
+    .logs-container { flex: none; height: calc(100vh - 390px); }
+    .card-header { padding: 0.5rem 0.75rem; }
+    .card-body { padding: 0.75rem; }
+    .card { margin-bottom: 15px; }
+}
+
+@media (max-width: 768px) {
+    body { padding: 8px; }
+    .editor-wrapper { flex: none; height: 420px; }
+    .logs-container { flex: none; height: 350px; }
+    .status-item { margin-bottom: 8px; }
+    .config-path {
+        max-width: 100%;
+        white-space: normal;
+        word-break: break-all;
+        font-size: 0.85em;
+    }
+    .card { margin-bottom: 12px; }
+    .progress-section { padding: 10px; }
+    .phase-steps { flex-wrap: wrap; gap: 6px; }
+}
+
+/* 卡片样式 */
+.card {
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.card-header {
+    background-color: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* 日志颜色样式 - 暗色主题 */
+.log-info { color: #a6e3a1; }
+.log-error { color: #f38ba8; }
+.log-warn { color: #f9e2af; }
+.log-debug { color: #89b4fa; }
+.log-time { color: #7f849c; }
+
+/* 状态栏 */
+.status-bar {
+    background-color: var(--bg-card);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.config-path {
+    white-space: normal;
+    word-break: break-all;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+}
+
+.api-key-form { margin-bottom: 16px; }
+
+/* 按钮样式 */
+.btn {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btn:active { transform: translateY(0); }
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 0.78rem;
+}
+
+.btn-primary {
+    background-color: var(--accent-blue);
+    border-color: var(--accent-blue);
+}
+
+.btn-danger {
+    background-color: var(--accent-red);
+    border-color: var(--accent-red);
+}
+
+.btn-success {
+    background-color: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+/* 提示框 */
+.alert {
+    padding: 0.75rem 1rem;
+    margin-bottom: 16px;
+    border: none;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+}
+
+.alert-info {
+    background-color: #eef2ff;
+    color: #3730a3;
+}
+
+.alert-info a {
+    color: #3730a3;
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.form-control {
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-control:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
+}
+
+h1 {
+    color: var(--text-primary);
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+/* 旋转动画 */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.rotate-animation {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+/* 配置编辑器蒙版 */
+.editor-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(240, 242, 245, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
+.editor-overlay-message {
+    background-color: var(--bg-card);
+    color: var(--text-secondary);
+    padding: 16px 24px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    text-align: center;
+}
+
+/* 阶段步骤指示器 */
+.phase-steps {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.phase-step {
+    flex: 1;
+    text-align: center;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background-color: #f0f2f5;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.phase-step.active {
+    background-color: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+    box-shadow: 0 2px 8px rgba(67, 97, 238, 0.3);
+}
+
+.phase-step.done {
+    background-color: #d1fae5;
+    color: #065f46;
+    border-color: #a7f3d0;
+}
+
+.phase-step .phase-icon {
+    margin-right: 4px;
+}
+
+.phase-step .phase-count {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 400;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
+/* 进度条样式 */
+.progress-section {
+    padding: 14px;
+    background-color: var(--bg-card);
+    border-top: 1px solid var(--border-color);
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.progress {
+    height: 12px;
+    position: relative;
+    background-color: #e9ecef;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    transition: width 0.5s ease;
+    border-radius: 6px;
+}
+
+.progress-bar-success {
+    background: linear-gradient(90deg, #2ec4b6, #28a745);
+    position: absolute;
+    height: 100%;
+    left: 0; top: 0;
+    z-index: 10;
+    box-shadow: 0 0 10px rgba(46, 196, 182, 0.4);
+}
+
+.progress-bar-total {
+    background-color: rgba(67, 97, 238, 0.25);
+    position: absolute;
+    height: 100%;
+    left: 0; top: 0;
+    z-index: 5;
+}
+
+/* 闪烁效果 */
+@keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}
+
+.success-highlight {
+    animation: pulse 1.5s infinite;
+    font-weight: bold;
+    color: var(--accent-green);
+    padding: 1px 4px;
+    border-radius: 4px;
+    background-color: rgba(46, 196, 182, 0.1);
+}
+
+/* 版本标签 */
+.version-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    background-color: #eef2ff;
+    color: var(--accent-blue);
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+/* 日志容器滚动条 */
+.logs-container::-webkit-scrollbar { width: 6px; }
+.logs-container::-webkit-scrollbar-track { background: transparent; }
+.logs-container::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
+.logs-container::-webkit-scrollbar-thumb:hover { background: #585b70; }
