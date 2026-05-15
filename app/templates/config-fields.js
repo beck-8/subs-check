@@ -1,0 +1,77 @@
+// 配置表单字段定义
+const CONFIG_FORM_FIELDS = [
+    { section: '总体设置', yamlKey: 'print-progress', label: '显示进度', type: 'checkbox', help: '是否显示进度' },
+    { section: '总体设置', yamlKey: 'concurrent', label: '并发线程数', type: 'number', help: '测活阶段使用此值' },
+    { section: '总体设置', yamlKey: 'media-concurrent', label: '流媒体并发数', type: 'number', help: '流媒体检测并发数，默认等于 concurrent' },
+    { section: '总体设置', yamlKey: 'speed-concurrent', label: '测速并发数', type: 'number', help: '测速并发数，默认等于 concurrent，建议设置较低值' },
+    { section: '总体设置', yamlKey: 'check-interval', label: '检查间隔(分钟)', type: 'number', help: '必须大于0，小于等于0会设置间隔1分钟' },
+    { section: '总体设置', yamlKey: 'cron-expression', label: 'Cron 表达式', type: 'text', help: '配置后将忽略 check-interval，可填写标准 cron 表达式' },
+    { section: '总体设置', yamlKey: 'callback-script', label: '回调脚本', type: 'text', help: '检测完成后执行的脚本路径' },
+    { section: '总体设置', yamlKey: 'listen-port', label: '监听端口', type: 'text', help: 'Web 控制面板端口，修改后需要重启生效' },
+    { section: '总体设置', yamlKey: 'enable-web-ui', label: '启用 Web UI', type: 'checkbox', help: '是否启用 Web 控制面板' },
+    { section: '总体设置', yamlKey: 'api-key', label: 'Web UI API Key', type: 'password', help: '访问 Web UI API 时使用的密钥' },
+
+    { section: '检查设置', yamlKey: 'alive-test-url', label: '延迟测试 URL', type: 'text', help: '节点延迟测试地址，建议保持稳定' },
+    { section: '检查设置', yamlKey: 'speed-test-url', label: '测速 URL', type: 'text', help: '测速地址，尽量不要使用受限网站，建议自建或稳定资源' },
+    { section: '检查设置', yamlKey: 'min-speed', label: '最低速度(KB/s)', type: 'number', help: '低于此值的测速结果会被舍弃' },
+    { section: '检查设置', yamlKey: 'download-timeout', label: '下载超时(秒)', type: 'number', help: '下载测试时间，与下载链接大小相关，默认最大测试 10 秒' },
+    { section: '检查设置', yamlKey: 'download-mb', label: '测速下载大小(MB)', type: 'number', help: '单节点测速下载数据大小上限，0 为不限' },
+    { section: '检查设置', yamlKey: 'total-speed-limit', label: '总速率限制(MB/s)', type: 'number', help: '总下载速度限制，0 为不限' },
+    { section: '检查设置', yamlKey: 'timeout', label: '超时时间(毫秒)', type: 'number', help: '节点最大延迟，超时则判定失败' },
+    
+    { section: '流媒体+重命名设置', yamlKey: 'rename-node', label: '启用节点重命名', type: 'checkbox', help: '按节点 IP 查询位置重命名节点' },
+    { section: '流媒体+重命名设置', yamlKey: 'node-prefix', label: '节点前缀', type: 'text', help: 'rename-node 开启时节点前缀' },
+    { section: '流媒体+重命名设置', yamlKey: 'node-type', label: '节点协议过滤', type: 'textarea', rows: 3, help: '每行一个协议，例如 ss、vmess、vless' },
+    { section: '流媒体+重命名设置', yamlKey: 'filter-regex', label: '名称过滤正则', type: 'text', help: '节点名称过滤，只有匹配的节点才会被保留' },
+    { section: '流媒体+重命名设置', yamlKey: 'filter', label: '名称过滤数组', type: 'textarea', rows: 4, help: '按行填写正则表达式，支持按地区/IP 风险/平台过滤' },
+    { section: '流媒体+重命名设置', yamlKey: 'media-check', label: '开启流媒体检测', type: 'checkbox', help: '是否开启流媒体检测' },
+    { section: '流媒体+重命名设置', yamlKey: 'media-check-timeout', label: '流媒体超时时间(秒)', type: 'number', help: '流媒体检测超时时间，默认 10 秒' },
+    { section: '流媒体+重命名设置', yamlKey: 'platforms', label: '平台列表', type: 'textarea', rows: 4, help: '每行一个平台名称，用于流媒体检测' },
+    
+    { section: '订阅设置', yamlKey: 'sub-urls-retry', label: '订阅重试次数', type: 'number', help: '获取订阅失败后重试次数' },
+    { section: '订阅设置', yamlKey: 'sub-urls-retry-interval', label: '订阅重试间隔(秒)', type: 'number', help: '订阅重试间隔，单位秒' },
+    { section: '订阅设置', yamlKey: 'sub-urls-timeout', label: '订阅超时(秒)', type: 'number', help: '获取订阅链接超时时间' },
+    { section: '订阅设置', yamlKey: 'sub-urls-concurrent', label: '订阅并发数', type: 'number', help: '控制同时拉取多少个订阅链接' },
+    { section: '订阅设置', yamlKey: 'sub-urls-get-ua', label: '订阅 UA', type: 'text', help: '请求订阅时使用的 UA，设置 random 可随机 UA' },
+    { section: '订阅设置', yamlKey: 'github-proxy', label: 'Github 代理', type: 'text', help: '拉取订阅时使用的 ghproxy 地址，结尾应带 /' },
+    { section: '订阅设置', yamlKey: 'sub-urls-remote', label: '远程订阅清单', type: 'textarea', rows: 5, help: '每行一个 URL，支持注释和 YAML/JSON 列表格式' },
+    { section: '订阅设置', yamlKey: 'sub-urls', label: '订阅地址', type: 'textarea', rows: 6, help: '每行一个订阅链接，支持 clash/meta/base64、注释等' },
+    { section: '订阅设置', yamlKey: 'success-rate', label: '成功率阈值', type: 'number', step: '0.1', help: '成功节点占比低于此值时会打印订阅链接用于排查' },
+    { section: '订阅设置', yamlKey: 'success-limit', label: '成功节点上限', type: 'number', help: '保留的成功节点数上限，0 表示不限制' },
+
+    { section: '保存设置', yamlKey: 'mihomo-overwrite-url', label: '覆写订阅 URL', type: 'text', help: '生成应用覆盖订阅文件时使用的 URL' },
+    { section: '保存设置', yamlKey: 'save-method', label: '保存方式', type: 'select', options: ['local', 'r2', 'gist', 'webdav', 's3'], help: '保存节点结果的方式' },
+    { section: '保存设置', yamlKey: 'output-dir', label: '输出目录', type: 'text', help: '输出目录，留空则默认当前目录下' },
+    { section: '保存设置', yamlKey: 'keep-days', label: '历史保留天数', type: 'number', help: '保留最近 N 天的历史节点，0 为关闭' },
+    { section: '保存设置', yamlKey: 'github-token', label: 'Github Token', type: 'password', help: '保存到 Gist 或 Github API 时使用' },
+    { section: '保存设置', yamlKey: 'github-gist-id', label: 'Github Gist ID', type: 'text', help: '保存到 Gist 时使用的 Gist ID' },
+    { section: '保存设置', yamlKey: 'github-api-mirror', label: 'Github API 镜像', type: 'text', help: 'GitHub API 加速地址' },
+    { section: '保存设置', yamlKey: 'webdav-url', label: 'WebDAV URL', type: 'text', help: 'WebDAV 保存地址' },
+    { section: '保存设置', yamlKey: 'webdav-username', label: 'WebDAV 用户名', type: 'text', help: 'WebDAV 登录用户名' },
+    { section: '保存设置', yamlKey: 'webdav-password', label: 'WebDAV 密码', type: 'password', help: 'WebDAV 登录密码' },
+    { section: '保存设置', yamlKey: 's3-endpoint', label: 'S3 Endpoint', type: 'text', help: 'S3/Minio 服务地址' },
+    { section: '保存设置', yamlKey: 's3-access-id', label: 'S3 Access ID', type: 'text', help: 'S3 访问 ID' },
+    { section: '保存设置', yamlKey: 's3-secret-key', label: 'S3 Secret Key', type: 'password', help: 'S3 密钥' },
+    { section: '保存设置', yamlKey: 's3-bucket', label: 'S3 Bucket', type: 'text', help: 'S3 Bucket 名称' },
+    { section: '保存设置', yamlKey: 's3-use-ssl', label: 'S3 使用 SSL', type: 'checkbox', help: '是否启用 SSL 连接 S3' },
+    { section: '保存设置', yamlKey: 's3-bucket-lookup', label: 'S3 Bucket Lookup', type: 'select', options: ['auto', 'path', 'dns'], help: 'S3 桶访问方式' },
+    
+    { section: '通知设置', yamlKey: 'notify-title', label: '通知标题', type: 'text', help: '检测通知推送时的标题' },
+    { section: '通知设置', yamlKey: 'apprise-api-server', label: 'Apprise 地址', type: 'text', help: 'Apprise API Server 地址' },
+    { section: '通知设置', yamlKey: 'recipient-url', label: '通知目标', type: 'textarea', rows: 3, help: '每行一个通知渠道地址，支持 apprise 格式' },
+
+    { section: 'sub-store设置', yamlKey: 'sub-store-port', label: 'sub-store 端口', type: 'text', help: '子服务 sub-store 启动端口，留空则不启动' },
+    { section: 'sub-store设置', yamlKey: 'sub-store-path', label: 'sub-store 路径', type: 'text', help: 'sub-store 自定义访问路径，必须以 / 开头' },
+    { section: 'sub-store设置', yamlKey: 'sub-store-sync-cron', label: 'sub-store 同步 Cron', type: 'text', help: 'sub-store 同步 Gist 的定时任务表达式' },
+    { section: 'sub-store设置', yamlKey: 'sub-store-produce-cron', label: 'sub-store 生产 Cron', type: 'text', help: 'sub-store 定时更新订阅的 Cron 表达式' },
+    { section: 'sub-store设置', yamlKey: 'sub-store-push-service', label: 'sub-store 推送服务', type: 'text', help: 'sub-store 推送标题/内容替换服务地址' },
+    
+    { section: 'DNS设置', yamlKey: 'dns.enable', label: '启用 DNS', type: 'checkbox', help: '开启 mihomo 全局 DNS 解析' },
+    { section: 'DNS设置', yamlKey: 'dns.ipv6', label: '启用 IPv6', type: 'checkbox', help: '开启 IPv6 解析' },
+    { section: 'DNS设置', yamlKey: 'dns.nameserver', label: 'DNS 解析服务器', type: 'textarea', rows: 3, help: '每行一个 DNS 解析服务器地址' },
+    { section: 'DNS设置', yamlKey: 'dns.proxy-server-nameserver', label: '代理服务器 DNS', type: 'textarea', rows: 3, help: '每行一个代理服务器专用 DNS 地址' },
+    { section: 'DNS设置', yamlKey: 'dns.default-nameserver', label: '默认 DNS', type: 'textarea', rows: 3, help: '每行一个默认 DNS，作为 bootstrap 使用' }
+];
+
+// 导出到全局作用域
+window.CONFIG_FORM_FIELDS = CONFIG_FORM_FIELDS;

@@ -65,7 +65,7 @@ func (app *App) initHttpServer() error {
 		slog.Info("启用Web控制面板", "path", "http://ip:port/admin", "api-key", config.GlobalConfig.APIKey)
 
 		// 设置模板加载 - 只有在启用Web控制面板时才加载
-		router.SetHTMLTemplate(template.Must(template.New("").ParseFS(configFS, "templates/*.html")))
+		router.SetHTMLTemplate(template.Must(template.New("").ParseFS(configFS, "templates/*.*")))
 
 		// API路由
 		api := router.Group("/api")
@@ -74,6 +74,8 @@ func (app *App) initHttpServer() error {
 			// 配置相关API
 			api.GET("/config", app.getConfig)
 			api.POST("/config", app.updateConfig)
+			api.GET("/config/form", app.getConfigForm)
+			api.POST("/config/form", app.updateConfigForm)
 
 			// 状态相关API
 			api.GET("/status", app.getStatus)
@@ -92,6 +94,9 @@ func (app *App) initHttpServer() error {
 				"configPath": app.configPath,
 			})
 		})
+
+		// 静态文件路由 - 服务templates目录下的文件
+		router.Static("/static", "./app/templates")
 	} else {
 		slog.Info("Web控制面板已禁用")
 	}
@@ -134,6 +139,98 @@ func (app *App) getConfig(c *gin.Context) {
 	})
 }
 
+func (app *App) getConfigForm(c *gin.Context) {
+	defaultYaml, err := yaml.Marshal(config.GlobalConfig)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("生成默认配置失败: %v", err)})
+		return
+	}
+
+	var defaultMap map[string]any
+	if err := yaml.Unmarshal(defaultYaml, &defaultMap); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("解析默认配置失败: %v", err)})
+		return
+	}
+
+	configData, err := os.ReadFile(app.configPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置文件失败: %v", err)})
+		return
+	}
+
+	var actualMap map[string]any
+	if err := yaml.Unmarshal(configData, &actualMap); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("解析配置文件失败: %v", err)})
+		return
+	}
+
+	if actualMap != nil {
+		mergeMaps(defaultMap, actualMap)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"config":                  defaultMap,
+		"availablePlatforms":      []string{"openai", "youtube", "netflix", "disney", "gemini", "iprisk", "tiktok", "claude", "spotify"},
+		"availableSaveMethods":    []string{"local", "r2", "gist", "webdav", "s3"},
+		"availableS3BucketLookup": []string{"auto", "path", "dns"},
+	})
+}
+
+func (app *App) updateConfigForm(c *gin.Context) {
+	var req map[string]any
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求格式"})
+		return
+	}
+
+	configData, err := os.ReadFile(app.configPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置文件失败: %v", err)})
+		return
+	}
+
+	var configMap map[string]any
+	if err := yaml.Unmarshal(configData, &configMap); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("解析配置文件失败: %v", err)})
+		return
+	}
+	if configMap == nil {
+		configMap = make(map[string]any)
+	}
+
+	mergeMaps(configMap, req)
+
+	updatedConfig, err := yaml.Marshal(configMap)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("序列化配置失败: %v", err)})
+		return
+	}
+
+	if err := os.WriteFile(app.configPath, updatedConfig, 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("保存配置文件失败: %v", err)})
+		return
+	}
+
+	if err := app.loadConfig(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("重新加载配置失败: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "配置已更新"})
+}
+
+func mergeMaps(dst, src map[string]any) {
+	for key, srcValue := range src {
+		if srcMap, ok := srcValue.(map[string]any); ok {
+			if dstMap, ok2 := dst[key].(map[string]any); ok2 {
+				mergeMaps(dstMap, srcMap)
+				continue
+			}
+		}
+		dst[key] = srcValue
+	}
+}
+
 // updateConfig 更新配置文件内容
 func (app *App) updateConfig(c *gin.Context) {
 	var req struct {
@@ -157,7 +254,12 @@ func (app *App) updateConfig(c *gin.Context) {
 		return
 	}
 
-	// 配置文件监听器会自动重新加载配置
+	// 立即重新加载配置，避免依赖 fsnotify 事件延迟
+	if err := app.loadConfig(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("重新加载配置失败: %v", err)})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "配置已更新"})
 }
 
@@ -181,14 +283,14 @@ func (app *App) getStatus(c *gin.Context) {
 		"speedPass":  check.SpeedOk.Load(),
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"checking":      app.checking.Load(),
-		"proxyCount":    check.ProxyCount.Load(),
-		"available":     check.Available.Load(),
-		"progress":      check.Progress.Load(),
-		"phase":         check.Phase.Load(),
-		"phaseResults":  phaseResults,
-		"pipeline":      pipeline,
-		"hasSpeedTest":  config.GlobalConfig.SpeedTestUrl != "",
+		"checking":     app.checking.Load(),
+		"proxyCount":   check.ProxyCount.Load(),
+		"available":    check.Available.Load(),
+		"progress":     check.Progress.Load(),
+		"phase":        check.Phase.Load(),
+		"phaseResults": phaseResults,
+		"pipeline":     pipeline,
+		"hasSpeedTest": config.GlobalConfig.SpeedTestUrl != "",
 	})
 }
 
