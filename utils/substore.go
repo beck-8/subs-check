@@ -16,6 +16,39 @@ import (
 	"github.com/beck-8/subs-check/config"
 )
 
+// ============================================================================
+// sub-store 数据模型速览(后端是 schemaless 的,数据以 JSON 存盘,字段即下面这些)
+//
+// 两种顶层对象:
+//   - subscription(订阅)  /api/sub/:name   —— 一组节点的来源。我们用名为 "sub"
+//     的本地订阅(source=local)装检测后的节点(content 字段,yaml)。见 sub 结构体。
+//   - file(文件)         /api/file/:name  —— 由某个 source 生成的产物文件。我们用
+//     名为 "mihomo" 的 file(type=mihomoProfile, sourceName="sub")做 mihomo 覆写。
+//     见 file 结构体。
+//
+// 两者都带一条 process 处理流水线(数组),每项是一个算子(Operator):
+//   { type, args, disabled, customName, id }
+//   - type:     算子类型,如 "Quick Setting Operator" / "Script Operator" / "Sort Operator"
+//   - args:     参数,*类型随算子而变*(对象 / 字符串 / 数组都可能),所以这里用 any
+//   - disabled: 是否禁用
+//   - customName/id: 前端用的元数据。sub-store 后端处理时只读 type/args/disabled,
+//     customName 仅作前端显示名,故我们借它当"这是 subs-check 的算子"的标记(见 overwriteOpMarker)
+//
+// 接口要点:
+//   - 创建用 POST /api/subs、/api/files
+//   - 更新用 PATCH /api/sub/:name、/api/file/:name,是*浅合并* {...old, ...body},
+//     所以我们只发自己负责的字段,用户的其它改动会保留(见 updateSub / updatefile)
+//   - 检查只看返回的 status 字段(见 statusResult)。不存在时两个接口都返回 HTTP 500
+//     (sub-store 的 ResourceNotFoundError 把 404 误传成了 error.details,实际状态码回落到 500):
+//     /api/sub 返回 500+HTML,/api/wholeFile 返回 500+JSON(status=failed)。故先判状态码再解析。
+//   - 注意 /api/wholeFile 只返回存盘的原始对象、不做任何转换,所以 status!=success 只代表"文件不存在",
+//     不是转换失败;真正会转换/可能转换失败的是 /api/file/:name(produce,失败时 500,不存在时 404)。
+//
+// 注:下面结构体里带 omitempty 但我们不写入的字段(displayName/ua/... )仅作字段说明用。
+// 参考: ../sub-store/backend/src/restful/{subscriptions,file}.js
+//        ../sub-store/backend/src/core/proxy-utils/processors/index.js
+// ============================================================================
+
 // 订阅对象，对应 sub-store /api/sub 的字段。
 // 参考: ../sub-store/backend/src/restful/subscriptions.js
 // 我们只写入需要的字段，其余加 omitempty 仅作字段说明，不会序列化。
