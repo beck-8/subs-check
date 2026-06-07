@@ -128,9 +128,10 @@ github-proxy: "https://custom-domain/raw/"
 3. 在配置文件中设置 `speed-test-url` 为你的 Workers 地址：
 
 ```yaml
-# bytes 上限为 99999999（约 95.37 MiB）——上游 speed.cloudflare.com 限制 bytes 必须 < 1e8，
-# 超过会被拒（403）。worker.js 已对超限请求自动钳制到最大值，填再大也只会下发上限大小。
-speed-test-url: https://custom-domain/speedtest?bytes=99999999
+# 100MB
+speed-test-url: https://custom-domain/speedtest?bytes=104857600
+# 1GB
+speed-test-url: https://custom-domain/speedtest?bytes=1073741824
 ```
 
 </details>
