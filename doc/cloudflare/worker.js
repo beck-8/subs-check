@@ -104,9 +104,15 @@ const routeHandlers = {
             }
 
             const speedTestUrl = `https://speed.cloudflare.com/__down?bytes=${bytes}`;
+            // speed.cloudflare.com 对 bytes >= 1e8 (约 95.37 MiB) 的请求会做来源校验：
+            // 缺少 Origin/Referer 的请求(如 subs-check/wget/curl 等非浏览器客户端)直接返回 403。
+            // 这里补上 Referer，使任意大小的测速请求都能通过；小于 1e8 时本就无此限制。
+            const headers = new Headers(request.headers);
+            headers.set('Referer', 'https://speed.cloudflare.com/');
+
             const response = await fetch(speedTestUrl, {
                 method: request.method,
-                headers: request.headers
+                headers
             });
 
             return new Response(response.body, {
