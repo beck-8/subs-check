@@ -98,9 +98,20 @@ const routeHandlers = {
     },
     async speedtest(request, url, env) {
         try {
-            const bytes = url.searchParams.get('bytes');
-            if (!bytes) {
+            // 上游 speed.cloudflare.com/__down 的硬上限：bytes 必须 < 100000000 (1e8, 约 95.37 MiB)。
+            // bytes >= 1e8 会被上游直接返回 403，因此这里把超限请求钳制到最大可用值再转发。
+            const MAX_BYTES = 99999999;
+            const rawBytes = url.searchParams.get('bytes');
+            if (!rawBytes) {
                 return handleError('请提供测试大小(bytes)', 400);
+            }
+
+            let bytes = parseInt(rawBytes, 10);
+            if (isNaN(bytes) || bytes <= 0) {
+                return handleError('bytes 必须为正整数', 400);
+            }
+            if (bytes > MAX_BYTES) {
+                bytes = MAX_BYTES; // 超过上游上限，钳制到最大值，避免 403
             }
 
             const speedTestUrl = `https://speed.cloudflare.com/__down?bytes=${bytes}`;
