@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -66,6 +67,13 @@ func (app *App) initHttpServer() error {
 
 		// 设置模板加载 - 只有在启用Web控制面板时才加载
 		router.SetHTMLTemplate(template.Must(template.New("").ParseFS(configFS, "templates/*.html")))
+
+		// 内置静态资源（bootstrap / bootstrap-icons / monaco-editor），避免依赖外部 CDN
+		staticFS, err := fs.Sub(configFS, "static")
+		if err != nil {
+			return fmt.Errorf("加载内置静态资源失败: %w", err)
+		}
+		router.StaticFS("/static", http.FS(staticFS))
 
 		// API路由
 		api := router.Group("/api")
