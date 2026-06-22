@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subs Check 配置管理</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/editor/editor.main.css" rel="stylesheet">
+    <link href="/static/bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/monaco/vs/editor/editor.main.css" rel="stylesheet">
     <style>
         :root {
             --bg-primary: #f0f2f5;
@@ -548,13 +548,13 @@
     </div>
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/bootstrap/bootstrap.bundle.min.js"></script>
 
     <!-- Monaco Editor -->
-    <script>var require = { paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs' } };</script>
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/loader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/editor/editor.main.nls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs/editor/editor.main.js"></script>
+    <script>var require = { paths: { 'vs': '/static/monaco/vs' } };</script>
+    <script src="/static/monaco/vs/loader.js"></script>
+    <script src="/static/monaco/vs/editor/editor.main.nls.js"></script>
+    <script src="/static/monaco/vs/editor/editor.main.js"></script>
 
     <script>
         let editor;

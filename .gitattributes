@@ -1,0 +1,22 @@
+# 默认:仓库内统一用 LF,检出时也强制 LF,保证多平台字节一致
+# (Go 源码 / gofmt / install.sh 等都依赖 LF;覆盖各机器的 core.autocrlf 设置)
+* text=auto eol=lf
+
+# 内置静态资源:这些文件会被 go:embed 原样打进二进制,
+# 字节必须跨平台恒等,绝不能被换行符转换改动 → 当二进制冻结(并跳过文本 diff)
+app/static/** binary
+
+# 显式标注二进制类型,避免被误判为文本而做换行符转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.zst   binary
+*.gz    binary
+*.zip   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
+*.dat   binary
+*.mmdb  binary
