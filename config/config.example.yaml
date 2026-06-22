@@ -169,6 +169,9 @@ sub-store-push-service: ""
 # 防止网络不好，所以现在内置，依赖:8199端口
 # 如果你想替换其他的自定义覆写文件，自己命名后放在output目录，然后更改此URL后缀即可
 mihomo-overwrite-url: "http://127.0.0.1:8199/sub/ACL4SSR_Online_Full.yaml"
+# 覆盖订阅所引用的来源类型和名称，默认为 subscription 和 sub, mihomo-overwrite-type 可以是 "subscription" 和 "collection"
+mihomo-overwrite-type: "subscription"
+mihomo-overwrite-name: "sub"
 
 # 保存方法
 # 目前支持的保存方法: r2, local, gist, webdav, s3

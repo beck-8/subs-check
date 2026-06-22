@@ -266,6 +266,14 @@ func checkfile() error {
 	return nil
 }
 func createfile() error {
+	sourceName := config.GlobalConfig.MihomoOverwriteName
+	if sourceName == "" {
+		sourceName = "sub"
+	}
+	sourceType := config.GlobalConfig.MihomoOverwriteType
+	if sourceType == "" {
+		sourceType = "subscription"
+	}
 	file := file{
 		Name: MihomoName,
 		Process: []Operator{
@@ -280,8 +288,8 @@ func createfile() error {
 		},
 		Remark:     "subs-check专用,勿动",
 		Source:     "local",
-		SourceName: "sub",
-		SourceType: "subscription",
+		SourceName: sourceName,
+		SourceType: sourceType,
 		Type:       "mihomoProfile",
 	}
 	json, err := json.Marshal(file)
@@ -300,6 +308,14 @@ func createfile() error {
 }
 
 func updatefile() error {
+	sourceName := config.GlobalConfig.MihomoOverwriteName
+	if sourceName == "" {
+		sourceName = "sub"
+	}
+	sourceType := config.GlobalConfig.MihomoOverwriteType
+	if sourceType == "" {
+		sourceType = "subscription"
+	}
 	// 把现有 file 整个拉出来，只改我们自己的 Script Operator 的覆写 URL，
 	// 再用 PATCH (浅合并) 只发回 process。这样用户加的其它算子和文件的其它字段都保留。
 	resp, err := http.Get(fmt.Sprintf("%s/api/wholeFile/%s", BaseURL, MihomoName))
@@ -374,7 +390,11 @@ func updatefile() error {
 		return nil
 	}
 
-	payload, err := json.Marshal(map[string]any{"process": process})
+	payload, err := json.Marshal(map[string]any{
+		"process":    process,
+		"sourceName": sourceName,
+		"sourceType": sourceType,
+	})
 	if err != nil {
 		return err
 	}

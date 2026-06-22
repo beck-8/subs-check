@@ -56,6 +56,8 @@ type Config struct {
 	SubStorePushService  string   `yaml:"sub-store-push-service"`
 	SubStoreProduceCron  string   `yaml:"sub-store-produce-cron"`
 	MihomoOverwriteUrl   string   `yaml:"mihomo-overwrite-url"`
+	MihomoOverwriteType  string   `yaml:"mihomo-overwrite-type"`
+	MihomoOverwriteName  string   `yaml:"mihomo-overwrite-name"`
 	MediaCheck           bool     `yaml:"media-check"`
 	Platforms            []string `yaml:"platforms"`
 	SuccessLimit         int32    `yaml:"success-limit"`
@@ -86,6 +88,8 @@ var GlobalConfig = &Config{
 	ListenPort:         ":8199",
 	NotifyTitle:        "🔔 节点状态更新",
 	MihomoOverwriteUrl: "http://127.0.0.1:8199/sub/ACL4SSR_Online_Full.yaml",
+	MihomoOverwriteType: "subscription",
+	MihomoOverwriteName: "sub",
 	MediaCheckTimeout:  10,
 	Platforms:          []string{"openai", "youtube", "netflix", "disney", "gemini", "iprisk"},
 	DownloadMB:         20,
