@@ -50,6 +50,8 @@ type Config struct {
 	AppriseApiServer     string   `yaml:"apprise-api-server"`
 	RecipientUrl         []string `yaml:"recipient-url"`
 	NotifyTitle          string   `yaml:"notify-title"`
+	DingTalkWebhook      string   `yaml:"dingtalk-webhook"`
+	DingTalkSecret       string   `yaml:"dingtalk-secret"`
 	SubStorePort         string   `yaml:"sub-store-port"`
 	SubStorePath         string   `yaml:"sub-store-path"`
 	SubStoreSyncCron     string   `yaml:"sub-store-sync-cron"`

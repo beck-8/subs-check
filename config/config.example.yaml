@@ -142,6 +142,14 @@ recipient-url:
 # 自定义通知标题
 notify-title: "🔔 节点状态更新"
 
+# 钉钉机器人直接推送（无需 Apprise）
+# 在钉钉群 → 设置 → 智能群助手 → 添加自定义机器人，获取 Webhook 地址
+# 安全设置建议选择"加签"，将密钥填入 dingtalk-secret
+# dingtalk-webhook: "https://oapi.dingtalk.com/robot/send?access_token=xxxxxxx"
+dingtalk-webhook: ""
+# 加签密钥（可选，机器人安全设置选择"加签"时需要填写）
+dingtalk-secret: ""
+
 # sub-store的启动端口，为空则不启动sub-store
 # 更新需重启程序，不可监听局域网IP，只有三种写法 :8299, 127.0.0.1:8299, 0.0.0.0:8299
 # sub-store-port: ":8299"

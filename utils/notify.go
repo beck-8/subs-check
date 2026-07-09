@@ -2,11 +2,15 @@ package utils
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -44,32 +48,123 @@ func Notify(request NotifyRequest) error {
 	return nil
 }
 
-func SendNotify(length int) {
-	if config.GlobalConfig.AppriseApiServer == "" {
-		return
-	} else if len(config.GlobalConfig.RecipientUrl) == 0 {
-		slog.Error("没有配置通知目标")
-		return
+// dingTalkRequest 钉钉机器人消息请求结构
+type dingTalkRequest struct {
+	MsgType  string              `json:"msgtype"`
+	Markdown dingTalkMarkdownMsg `json:"markdown"`
+}
+
+type dingTalkMarkdownMsg struct {
+	Title string `json:"title"`
+	Text  string `json:"text"`
+}
+
+// dingTalkResponse 钉钉 API 响应结构
+type dingTalkResponse struct {
+	ErrCode int    `json:"errcode"`
+	ErrMsg  string `json:"errmsg"`
+}
+
+// SendDingTalk 直接发送钉钉机器人消息
+func SendDingTalk(title, body string) error {
+	webhook := config.GlobalConfig.DingTalkWebhook
+	secret := config.GlobalConfig.DingTalkSecret
+
+	// 如果配置了加签密钥，计算签名并拼入 URL
+	if secret != "" {
+		timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
+		stringToSign := timestamp + "\n" + secret
+
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(stringToSign))
+		sign := url.QueryEscape(base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+
+		if strings.Contains(webhook, "?") {
+			webhook += "&timestamp=" + timestamp + "&sign=" + sign
+		} else {
+			webhook += "?timestamp=" + timestamp + "&sign=" + sign
+		}
 	}
 
-	for _, url := range config.GlobalConfig.RecipientUrl {
-		request := NotifyRequest{
-			URLs: url,
-			Body: fmt.Sprintf("✅ 可用节点：%d\n🕒 %s",
-				length,
-				GetCurrentTime()),
-			Title: config.GlobalConfig.NotifyTitle,
+	// 构造 Markdown 消息
+	msg := dingTalkRequest{
+		MsgType: "markdown",
+		Markdown: dingTalkMarkdownMsg{
+			Title: title,
+			Text:  fmt.Sprintf("### %s\n\n%s", title, body),
+		},
+	}
+
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("构建钉钉请求体失败: %w", err)
+	}
+
+	resp, err := http.Post(webhook, "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		return fmt.Errorf("发送钉钉请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("读取钉钉响应失败: %w", err)
+	}
+
+	var result dingTalkResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("解析钉钉响应失败: %w", err)
+	}
+
+	if result.ErrCode != 0 {
+		return fmt.Errorf("钉钉返回错误: code=%d, msg=%s", result.ErrCode, result.ErrMsg)
+	}
+
+	return nil
+}
+
+func SendNotify(length int) {
+	notifyBody := fmt.Sprintf("✅ 可用节点：%d\n\n🕒 %s", length, GetCurrentTime())
+	notifyTitle := config.GlobalConfig.NotifyTitle
+
+	// Apprise 通知
+	if config.GlobalConfig.AppriseApiServer != "" {
+		if len(config.GlobalConfig.RecipientUrl) == 0 {
+			slog.Error("没有配置通知目标")
+		} else {
+			for _, u := range config.GlobalConfig.RecipientUrl {
+				request := NotifyRequest{
+					URLs:  u,
+					Body:  fmt.Sprintf("✅ 可用节点：%d\n🕒 %s", length, GetCurrentTime()),
+					Title: notifyTitle,
+				}
+				var err error
+				for i := 0; i < config.GlobalConfig.SubUrlsReTry; i++ {
+					err = Notify(request)
+					if err == nil {
+						slog.Info(fmt.Sprintf("%s 通知发送成功", strings.SplitN(u, "://", 2)[0]))
+						break
+					}
+				}
+				if err != nil {
+					slog.Error(fmt.Sprintf("%s 发送通知失败: %v", strings.SplitN(u, "://", 2)[0], err))
+				}
+			}
 		}
+	}
+
+	// 钉钉直接推送
+	if config.GlobalConfig.DingTalkWebhook != "" {
 		var err error
 		for i := 0; i < config.GlobalConfig.SubUrlsReTry; i++ {
-			err = Notify(request)
+			err = SendDingTalk(notifyTitle, notifyBody)
 			if err == nil {
-				slog.Info(fmt.Sprintf("%s 通知发送成功", strings.SplitN(url, "://", 2)[0]))
+				slog.Info("钉钉通知发送成功")
 				break
 			}
 		}
 		if err != nil {
-			slog.Error(fmt.Sprintf("%s 发送通知失败: %v", strings.SplitN(url, "://", 2)[0], err))
+			slog.Error(fmt.Sprintf("钉钉通知发送失败: %v", err))
 		}
 	}
 }
@@ -77,3 +172,4 @@ func SendNotify(length int) {
 func GetCurrentTime() string {
 	return time.Now().Format("2006-01-02 15:04:05")
 }
+
