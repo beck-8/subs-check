@@ -12,6 +12,8 @@ on:
 
 jobs:
   claude-review:
+    # Only run on same-repository PRs; skip fork PRs that lack write access
+    if: github.event.pull_request.head.repo.full_name == github.repository
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
@@ -21,8 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
+      checks: write
+      statuses: write
       id-token: write
 
     steps:
