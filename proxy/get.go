@@ -65,6 +65,7 @@ func GetProxies() ([]map[string]any, error) {
 
 			url := e.url
 			data, err := GetDateFromSubs(url)
+			RecordSubUrlResult(url, e.source, err)
 			if err != nil {
 				slog.Error("获取订阅链接错误跳过", "source", e.source, "url", url, "err", err)
 				return
@@ -149,6 +150,9 @@ func GetProxies() ([]map[string]any, error) {
 
 	// 等待所有工作协程完成
 	wg.Wait()
+
+	// 持久化本轮订阅链接的可用性统计，便于识别长期不可用的订阅
+	SaveSubUrlStats()
 
 	// 按订阅顺序合并,保证本地订阅在前、远程订阅在后,订阅内节点顺序也保留
 	total := 0

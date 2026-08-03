@@ -545,6 +545,41 @@
                 </div>
             </div>
         </div>
+
+        <!-- 订阅链接可用性统计 -->
+        <div class="row main-row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-graph-down-arrow me-1"></i>订阅链接统计</span>
+                            <button id="refreshSubStats" class="btn btn-secondary btn-sm">
+                                <i class="bi bi-arrow-repeat me-1"></i>刷新
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0" id="subStatsTable">
+                                <thead>
+                                    <tr>
+                                        <th>订阅链接</th>
+                                        <th>来源</th>
+                                        <th>总请求</th>
+                                        <th>失败次数</th>
+                                        <th>最近失败时间</th>
+                                        <th>最近失败原因</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="subStatsBody">
+                                    <tr><td colspan="6" class="text-center text-muted">暂无数据</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Bootstrap JS -->
@@ -1054,6 +1089,7 @@
         // 初始加载
         updateStatus();
         loadLogs();
+        loadSubStats();
 
         // 检查API密钥
         const apiKey = localStorage.getItem('apiKey');
@@ -1065,6 +1101,65 @@
         // 定时刷新
         setInterval(loadLogs, 10000);
         setInterval(updateStatus, 3000);
+        setInterval(loadSubStats, 30000);
+
+        // 加载订阅链接统计
+        function loadSubStats() {
+            return fetch('/api/sub-stats', {
+                headers: addApiKeyHeader()
+            })
+            .then(response => {
+                if (handleUnauthorized(response, false)) throw new Error('未授权');
+                return response.json();
+            })
+            .then(data => {
+                const tbody = document.getElementById('subStatsBody');
+                const stats = (data && data.stats) || [];
+                if (stats.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">暂无数据</td></tr>';
+                    return data;
+                }
+                const fragment = document.createDocumentFragment();
+                stats.forEach(s => {
+                    const tr = document.createElement('tr');
+                    const failRate = s.total_requests > 0 ? (s.failed_requests / s.total_requests * 100).toFixed(0) + '%' : '-';
+                    if (s.total_requests > 0 && s.failed_requests === s.total_requests) {
+                        tr.className = 'table-danger';
+                    } else if (s.failed_requests > 0) {
+                        tr.className = 'table-warning';
+                    }
+                    const lastFail = s.last_fail_time && !s.last_fail_time.startsWith('0001-01-01') ? new Date(s.last_fail_time).toLocaleString() : '-';
+                    tr.innerHTML =
+                        '<td class="text-break">' + escapeHtml(s.url) + '</td>' +
+                        '<td>' + escapeHtml(s.source || '-') + '</td>' +
+                        '<td>' + s.total_requests + '</td>' +
+                        '<td>' + s.failed_requests + ' (' + failRate + ')</td>' +
+                        '<td>' + lastFail + '</td>' +
+                        '<td class="text-break">' + escapeHtml(s.last_fail_reason || '-') + '</td>';
+                    fragment.appendChild(tr);
+                });
+                tbody.innerHTML = '';
+                tbody.appendChild(fragment);
+                return data;
+            })
+            .catch(error => {
+                if (error.message !== '未授权') {
+                    console.error('获取订阅统计失败:', error);
+                }
+            });
+        }
+
+        document.getElementById('refreshSubStats').addEventListener('click', function() {
+            const icon = this.querySelector('i');
+            const originalIcon = icon.className;
+            icon.className = 'bi bi-arrow-repeat me-1 rotate-animation';
+            this.disabled = true;
+            const button = this;
+            loadSubStats().finally(() => {
+                icon.className = originalIcon;
+                button.disabled = false;
+            });
+        });
 
         // 获取版本信息
         function getVersionInfo() {

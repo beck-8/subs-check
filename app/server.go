@@ -15,6 +15,7 @@ import (
 
 	"github.com/beck-8/subs-check/check"
 	"github.com/beck-8/subs-check/config"
+	proxyutils "github.com/beck-8/subs-check/proxy"
 	"github.com/beck-8/subs-check/save/method"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
@@ -92,6 +93,9 @@ func (app *App) initHttpServer() error {
 
 			// 日志相关API
 			api.GET("/logs", app.getLogs)
+
+			// 订阅链接可用性统计
+			api.GET("/sub-stats", app.getSubStats)
 		}
 
 		// 配置页面
@@ -232,6 +236,11 @@ func (app *App) getLogs(c *gin.Context) {
 // getLogs 获取最近日志
 func (app *App) getVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"version": app.version})
+}
+
+// getSubStats 获取订阅链接可用性统计，便于识别长期不可用的订阅链接
+func (app *App) getSubStats(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"stats": proxyutils.GetSubUrlStats()})
 }
 
 // ReadLastNLines returns up to n trailing lines of filePath in file order.
