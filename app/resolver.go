@@ -18,6 +18,19 @@ var defaultBootstrapNameservers = []string{
 	"119.29.29.29",
 }
 
+// mihomo 只在 config 包的 init() 里给 dns.ParseNameServer 赋值，而 subs-check
+// 直接调用 adapter.ParseProxy、没有导入 mihomo/config，该变量就一直是 nil。
+// masque/wireguard/openvpn/zerotier 这些出站在 remote-dns-resolve 为 true 且
+// 配置了 dns 时会直接调用它，于是 NewMasque 里出现 nil 函数调用导致整个进程 panic。
+// 这里用本文件已有的解析逻辑补上，保证任何时候都不会是 nil。
+func init() {
+	if dns.ParseNameServer == nil {
+		dns.ParseNameServer = func(servers []string) ([]dns.NameServer, error) {
+			return parseNameservers(servers, "proxy dns")
+		}
+	}
+}
+
 // initResolver wires mihomo's global resolver based on user config.
 // Call after loadConfig() and before any proxy.DialContext.
 //

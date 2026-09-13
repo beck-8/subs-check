@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/beck-8/subs-check/check"
 	"github.com/beck-8/subs-check/config"
 	"github.com/metacubex/mihomo/component/resolver"
+	"github.com/metacubex/mihomo/dns"
 )
 
 func TestParseNameservers(t *testing.T) {
@@ -229,4 +231,40 @@ func TestValidateBootstrapIPs(t *testing.T) {
 			t.Errorf("ProxyServerHostResolver not set")
 		}
 	})
+}
+
+// masque/wireguard/openvpn/zerotier 在 remote-dns-resolve 打开时会调用
+// mihomo 的 dns.ParseNameServer，该变量只在 mihomo/config 包的 init 里赋值。
+// subs-check 不导入那个包，所以必须由本包补上，否则解析节点时直接空指针 panic。
+func TestParseNameServerHookInstalled(t *testing.T) {
+	if dns.ParseNameServer == nil {
+		t.Fatal("dns.ParseNameServer 为 nil，masque/wireguard 等节点会在解析时 panic")
+	}
+	nss, err := dns.ParseNameServer([]string{"1.1.1.1", "tls://8.8.8.8"})
+	if err != nil {
+		t.Fatalf("ParseNameServer 失败: %v", err)
+	}
+	if len(nss) != 2 || nss[0].Addr != "1.1.1.1:53" || nss[1].Net != "tls" {
+		t.Fatalf("解析结果不符合预期: %+v", nss)
+	}
+}
+
+// 端到端回归：带 remote-dns-resolve 的 masque 节点应当能正常创建，而不是 panic。
+// 私钥仅为测试用的临时 EC 密钥。
+func TestCreateClientMasqueRemoteDnsResolve(t *testing.T) {
+	c := check.CreateClient(map[string]any{
+		"name":               "masque-test",
+		"type":               "masque",
+		"server":             "127.0.0.1",
+		"port":               443,
+		"ip":                 "10.0.0.2/32",
+		"private-key":        "MHcCAQEEIBzmomrElVl1zZ8WGV6yLwbpHistcgxgbyRZ+LZn37RcoAoGCCqGSM49AwEHoUQDQgAEfUWudFf+OydYWO7dg/Ha77yLdGGzw3B58jt16ONISHG5GhNFzZKADb76a83Q+v6SFmI7MFw9MaS7udU9fLiXAw==",
+		"public-key":         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEfUWudFf+OydYWO7dg/Ha77yLdGGzw3B58jt16ONISHG5GhNFzZKADb76a83Q+v6SFmI7MFw9MaS7udU9fLiXAw==",
+		"remote-dns-resolve": true,
+		"dns":                []string{"1.1.1.1"},
+	})
+	if c == nil {
+		t.Fatal("CreateClient 返回 nil，masque 节点解析失败")
+	}
+	c.Close()
 }

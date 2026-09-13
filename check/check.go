@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -817,7 +818,18 @@ type ProxyClient struct {
 	BytesRead *uint64
 }
 
-func CreateClient(mapping map[string]any) *ProxyClient {
+func CreateClient(mapping map[string]any) (client *ProxyClient) {
+	// 订阅里的节点字段完全不可控，mihomo 某些出站在解析时可能直接 panic
+	// (例如 masque/wireguard 配了 remote-dns-resolve 时会调用可能为 nil 的 dns.ParseNameServer)，
+	// 这里兜底，避免一个坏节点把整个进程打挂。
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("创建mihomo Client时panic", "proxy", mapping["name"], "err", r)
+			slog.Debug("创建mihomo Client时panic堆栈", "proxy", mapping["name"], "stack", string(debug.Stack()))
+			client = nil
+		}
+	}()
+
 	proxy, err := adapter.ParseProxy(mapping)
 	if err != nil {
 		slog.Debug("创建mihomo Client失败", "proxy", mapping["name"], "err", err)
