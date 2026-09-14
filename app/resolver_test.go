@@ -24,6 +24,8 @@ func TestParseNameservers(t *testing.T) {
 		{"quic://dns.alidns.com", "quic", "dns.alidns.com:853"},
 		{"udp://[::1]", "", "[::1]:53"},
 		{"udp://[::1]:5353", "", "[::1]:5353"},
+		{"::1", "", "[::1]:53"},
+		{"2606:4700:4700::1111", "", "[2606:4700:4700::1111]:53"},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

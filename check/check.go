@@ -20,6 +20,7 @@ import (
 	proxyutils "github.com/beck-8/subs-check/proxy"
 	"github.com/juju/ratelimit"
 	"github.com/metacubex/mihomo/adapter"
+	_ "github.com/metacubex/mihomo/config" // init() sets dns.ParseNameServer, required by ParseProxy
 	"github.com/metacubex/mihomo/constant"
 )
 
